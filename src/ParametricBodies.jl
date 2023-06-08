@@ -1,13 +1,11 @@
 module ParametricBodies
 
-import WaterLily: AbstractBody,×
+import WaterLily: AbstractBody
 using StaticArrays,ForwardDiff
 
 struct ParametricBody <: AbstractBody
     surf    #x = surf(uv,t)
     locate  #uv = locate(surf,x,t)
-    fast_d² #d^2 ≈ fast_d²(x,t)
-    ParametricBody(surf,locate,fast_d²=(x,t)->(p=x-surf(locate(x,t),t); p'*p)) = new(surf,locate,fast_d²)
 end
 
 function measure(body::ParametricBody,x::SVector,t)
@@ -27,5 +25,10 @@ function norm_dir(surf,uv::Number,t)
     s = ForwardDiff.derivative(uv->surf(uv,t),uv)
     return SA[s[2],-s[1]]
 end
+
+export ParametricBody,measure,sdf
+
+include("HashedLocators.jl")
+export HashedLocator
 
 end
