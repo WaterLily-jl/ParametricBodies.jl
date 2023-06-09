@@ -31,7 +31,7 @@ end
     body = ParametricBody(surf,locator)
     @test isapprox(sdf(body,SA[-3.,-4.],t),4.,rtol=1e-2) # outside hash
 
-    t = 0.5; ParametricBodies.update!(body.locate,body.surf,t)
+    t = 0.5; update!(body,t)
     d,n,V = measure(body,SA[-.75,1],t)
     @test d ≈ 0.25
     @test isapprox(n,SA[-3/5, 4/5],rtol=1e-4)

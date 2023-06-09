@@ -1,11 +1,13 @@
 module ParametricBodies
 
-import WaterLily: AbstractBody
 using StaticArrays,ForwardDiff
+include("HashedLocators.jl")
+export HashedLocator
 
-struct ParametricBody <: AbstractBody
-    surf    #x = surf(uv,t)
-    locate  #uv = locate(surf,x,t)
+import WaterLily: AbstractBody
+struct ParametricBody{S<:Function,L<:Union{Function,HashedLocator}} <: AbstractBody
+    surf::S    #x = surf(uv,t)
+    locate::L  #uv = locate(surf,x,t)
 end
 
 function measure(body::ParametricBody,x::SVector,t)
@@ -26,9 +28,9 @@ function norm_dir(surf,uv::Number,t)
     return SA[s[2],-s[1]]
 end
 
-export ParametricBody,measure,sdf
+update!(body::ParametricBody{F,L},t) where {F<:Function,L<:HashedLocator} = 
+    update!(body.locate,body.surf,t)
 
-include("HashedLocators.jl")
-export HashedLocator
+export ParametricBody,measure,sdf,update!
 
 end
