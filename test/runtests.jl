@@ -22,12 +22,18 @@ end
 
 @testset "HashedLocators.jl" begin
     surf(θ,t) = SA[cos(θ+t),sin(θ+t)]
-    locator = HashedLocator(surf,(0,2π),SA[-2,-2],SA[2,2],0.25)
+    t = 0.
+    locator = HashedLocator(surf,(0.,2π),SA[-2,-2],SA[2,2],t⁰=t,step=0.25)
 
-    t = 0. # need to update hash before changing time
     @test isapprox(locator(SA[.3,.4],t),atan(4,3),rtol=1e-4)
     @test isapprox(surf(locator(SA[-1.2,.9],t),t),SA[-4/5,3/5],rtol=1e-4)
 
     body = ParametricBody(surf,locator)
-    @test isapprox(sdf(body,SA[-3.,-4.],t),4.,atol=0.5) # outside hash
+    @test isapprox(sdf(body,SA[-3.,-4.],t),4.,rtol=1e-2) # outside hash
+
+    t = 0.5; ParametricBodies.update!(body.locate,body.surf,t)
+    d,n,V = measure(body,SA[-.75,1],t)
+    @test d ≈ 0.25
+    @test isapprox(n,SA[-3/5, 4/5],rtol=1e-4)
+    @test isapprox(V,SA[-4/5,-3/5],rtol=1e-4)
 end
