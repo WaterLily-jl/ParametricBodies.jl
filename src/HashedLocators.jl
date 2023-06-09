@@ -1,17 +1,18 @@
-struct HashedLocator
-    alignment
-    uv_bounds
-    lower
-    step
-    uv_hash
-    function HashedLocator(surf,uv_bounds,lower,upper;step=1,t⁰=0.,mem=Array)
+struct HashedLocator{N,T,F<:Function,A<:AbstractArray{T,N}}
+    alignment::F
+    uv_bounds::NTuple{2,T}
+    lower::SVector{N,T}
+    step::T
+    uv_hash::A
+    function HashedLocator(surf,uv_bounds,lower,upper;step=1,t⁰=0.,T=Float64,mem=Array)
         # surf(uv*,t) is closest to x when alignment(uv*,t,x)=0
         dsurf(uv,t) = ForwardDiff.derivative(uv->surf(uv,t),uv)
         alignment(uv,t,x) = (x-surf(uv,t))'*dsurf(uv,t)
     
         # Allocate hash table and struct
-        uv_hash = fill(uv_bounds[1],ceil.(Int,(upper-lower)/step .+ 1)...) |> mem
-        l = new(alignment,uv_bounds,lower,step,uv_hash)
+        uv_hash = fill(T(uv_bounds[1]),ceil.(Int,(upper-lower)/step .+ 1)...) |> mem
+        N,F,A = length(lower),typeof(alignment),typeof(uv_hash)
+        l = new{N,T,F,A}(alignment,T.(uv_bounds),SVector{N,T}(lower),T(step),uv_hash)
     
         # Fill uv_hash
         update!(l,surf,t⁰,samples=20)
@@ -40,7 +41,7 @@ function NewtonStep!(uv,l::HashedLocator,x,t)
     uv = clamp(uv-step,l.uv_bounds...)
 end
 
-function (l::HashedLocator)(x::SVector,t)
+function (l::HashedLocator)(x,t)
     # Map location to hash index and clamp to within domain
     hash_index = (x-l.lower)/l.step .+ 1
     clamped = clamp.(hash_index,1.5,size(l.uv_hash) .- 0.5)
@@ -50,7 +51,7 @@ function (l::HashedLocator)(x::SVector,t)
     hash_index != clamped && return uv
 
     # Otherwise, refine uv estimate with NewtonStep
-    return NewtonStep!(uv,l::HashedLocator,x::SVector,t)
+    return NewtonStep!(uv,l,x,t)
 end
 
 function interp(x::SVector{D}, arr::AbstractArray{T,D}) where {D,T}
