@@ -18,6 +18,14 @@ using StaticArrays
     @test d ≈ 0.25
     @test n ≈ SA[-3/5, 4/5]
     @test V ≈ SA[-4/5,-3/5]
+
+    # use mapping to double and move circle
+    U=0.1; map(x,t)=(x-SA[U*t,0])/2
+    body = ParametricBody(surf,locate,map)
+    d,n,V = measure(body,SA[0.4,-2.1],4.)
+    @test d ≈ 0.1
+    @test n ≈ SA[0,-1]
+    @test V ≈ SA[2+U,0]
 end
 
 @testset "HashedLocators.jl" begin
@@ -36,4 +44,21 @@ end
     @test d ≈ 0.25
     @test isapprox(n,SA[-3/5, 4/5],rtol=1e-4)
     @test isapprox(V,SA[-4/5,-3/5],rtol=1e-4)
+
+    # use mapping to double, move and rotate circle
+    surf(θ,t) = SA[cos(θ),sin(θ)]; U=0.1
+    map(x,t)=SA[cos(t) sin(t); -sin(t) cos(t)]*(x-SA[U*t,0])/2
+    body = ParametricBody(surf,(0.,2π),SA[-2,-2],SA[2,2];step=0.25,map)
+    d,n,V = measure(body,SA[4U,-2.1],4.)
+    @test d ≈ 0.1
+    @test n ≈ SA[0,-1]
+    @test V ≈ SA[2.1+U,0] # rotation from map ∝ r, not R
+
+    # use mapping to limit the hash to positive quadrant
+    surf(θ,t) = SA[cos(θ+t),sin(θ+t)]
+    body = ParametricBody(surf,(0.,π/2),SA[0,0],SA[2,2];step=0.25,map=(x,t)->abs.(x))
+    d,n,V = measure(body,SA[-0.3,-0.4],0.)
+    @test d ≈ -0.5
+    @test n ≈ SA[-3/5,-4/5]
+    @test isapprox(V,SA[4/5,-3/5],rtol=1e-4)
 end
