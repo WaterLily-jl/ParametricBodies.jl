@@ -19,20 +19,25 @@ struct HashedLocator{N,T,F<:Function,A<:AbstractArray{T,N}}
     end
 end
 
-function update!(l::HashedLocator,surf,t;samples=2)
-    for I in CartesianIndices(l.uv_hash)
+using WaterLily
+function update!(l::HashedLocator,surf,t;samples=2) 
+    function update(I)
         # Map hash index to physical space
         x = l.step*(SA[I.I...] .- 1)+l.lower
-
+    
         # Grid search for uv within bounds
-        uv = l.uv_hash[I]
-        uv = argmin([range(l.uv_bounds...,samples)...,uv]) do uv
-            sum(abs2,x-surf(uv,t))
+        @inline dis2(uv) = (q=x-surf(uv,t); q'*q)
+        uv = l.uv_hash[I]; d = dis2(uv)
+        for uvᵢ in range(l.uv_bounds...,samples)
+            dᵢ = dis2(uvᵢ)
+            dᵢ<d && (uv=uvᵢ; d=dᵢ)
         end
-
+    
         # Refine with NewtonStep
-        l.uv_hash[I] = NewtonStep!(uv,l,x,t)
-    end; l
+        NewtonStep!(uv,l,x,t)
+    end
+    WaterLily.@loop l.uv_hash[I] = update(I) over I ∈ CartesianIndices(l.uv_hash)
+    return l
 end
 
 function NewtonStep!(uv,l::HashedLocator,x,t) 
@@ -44,7 +49,7 @@ end
 function (l::HashedLocator)(x,t)
     # Map location to hash index and clamp to within domain
     hash_index = (x-l.lower)/l.step .+ 1
-    clamped = clamp.(hash_index,1.5,size(l.uv_hash) .- 0.5)
+    clamped = clamp.(hash_index,1,size(l.uv_hash) .- 0.5f0)
 
     # Interpolate hash and return if index is outside domain
     uv = interp(clamped,l.uv_hash)
