@@ -4,7 +4,7 @@ using StaticArrays,ForwardDiff
 include("HashedLocators.jl")
 export HashedLocator
 
-import WaterLily: AbstractBody
+import WaterLily: AbstractBody,measure,sdf
 struct ParametricBody{S<:Function,L<:Union{Function,HashedLocator},I<:Function,N<:Number} <: AbstractBody
     surf::S    #ξ = surf(uv,t)
     locate::L  #uv = locate(surf,ξ,t)
@@ -14,8 +14,7 @@ end
 ParametricBody(surf,locate,map=(x,t)->x,x::SVector=SA[0.,0.]) = ParametricBody(surf,locate,map,get_scale(map,x))
 
 import LinearAlgebra: det
-get_scale(map,x::SVector{D},t=0.) where D = (dξdx=ForwardDiff.jacobian(x->map(x,t),x); det(dξdx)^(-1/D))
-
+get_scale(map,x::SVector{D},t=0.) where D = (dξdx=ForwardDiff.jacobian(x->map(x,t),x); abs(det(dξdx))^(-1/D))
 
 function measure(body::ParametricBody,x::SVector,t)
     # Compute n=∇sdf. This must include ∇uv, so uv can't be input
@@ -47,6 +46,6 @@ ParametricBody(surf,uv_bounds,lower,upper;step=1,t⁰=0.,T=Float64,mem=Array,map
 update!(body::ParametricBody{F,L},t) where {F<:Function,L<:HashedLocator} = 
     update!(body.locate,body.surf,t)
 
-export ParametricBody,measure,sdf,update!
+export ParametricBody
 
 end
