@@ -1,62 +1,72 @@
-struct HashedLocator{N,T,F<:Function,A<:AbstractArray{T,N}}
-    alignment::F
-    uv_bounds::NTuple{2,T}
-    lower::SVector{N,T}
+struct HashedLocator{T,F<:Function,A<:AbstractArray{T,2}}
+    refine::F
+    lims::NTuple{2,T}
+    hash::A
+    lower::SVector{2,T}
     step::T
-    uv_hash::A
-    function HashedLocator(surf,uv_bounds,lower,upper;step=1,t⁰=0.,T=Float64,mem=Array)
-        # surf(uv*,t) is closest to x when alignment(uv*,t,x)=0
-        dsurf(uv,t) = ForwardDiff.derivative(uv->surf(uv,t),uv)
-        alignment(uv,t,x) = (x-surf(uv,t))'*dsurf(uv,t)
-    
-        # Allocate hash table and struct
-        uv_hash = fill(T(uv_bounds[1]),ceil.(Int,(upper-lower)/step .+ 1)...) |> mem
-        N,F,A = length(lower),typeof(alignment),typeof(uv_hash)
-        l = new{N,T,F,A}(alignment,T.(uv_bounds),SVector{N,T}(lower),T(step),uv_hash)
-    
-        # Fill uv_hash
-        update!(l,surf,t⁰,samples=20)
-    end
-end
+    function HashedLocator(curve,lims;t⁰=0,step=1,T=Float64,mem=Array)
+        # Apply type and get refinement function
+        lims,t⁰,step = T.(lims),T(t⁰),T(step)
+        f = refine(curve,lims)
 
-using WaterLily
-function update!(l::HashedLocator,surf,t;samples=2) 
-    function update(I)
-        # Map hash index to physical space
-        x = l.step*(SA[I.I...] .- 1)+l.lower
-    
-        # Grid search for uv within bounds
-        @inline dis2(uv) = (q=x-surf(uv,t); q'*q)
-        uv = l.uv_hash[I]; d = dis2(uv)
-        for uvᵢ in range(l.uv_bounds...,samples)
-            dᵢ = dis2(uvᵢ)
-            dᵢ<d && (uv=uvᵢ; d=dᵢ)
+        # Get curve's bounding box
+        samples = range(lims...,20)
+        lower = upper = curve(first(samples),t⁰)
+        @assert isa(lower,SVector{2,T}) "`curve` is not type stable"
+        for uv in samples
+            x = curve(uv,t⁰)
+            lower = min.(lower,x)
+            upper = max.(upper,x)
         end
-    
-        # Refine with NewtonStep
-        NewtonStep!(uv,l,x,t)
+
+        # Allocate hash and struct, and update hash
+        hash = fill(first(lims),ceil.(Int,(upper-lower)/step .+ 3)...) |> mem
+        l=new{T,typeof(f),typeof(hash)}(f,lims,hash,lower.-step,step)
+        update!(l,curve,t⁰,samples)
     end
-    WaterLily.@loop l.uv_hash[I] = update(I) over I ∈ CartesianIndices(l.uv_hash)
-    return l
 end
 
-function NewtonStep!(uv,l::HashedLocator,x,t) 
-    step = l.alignment(uv,t,x)/ForwardDiff.derivative(uv->l.alignment(uv,t,x),uv)
-    isnan(step) && return uv
-    uv = clamp(uv-step,l.uv_bounds...)
+function refine(curve,lims)
+    # uv⁺ = argmin_uv (X-curve(uv,t))² -> alignment(X,uv⁺,t))=0
+    dcurve(uv,t) = ForwardDiff.derivative(uv->curve(uv,t),uv)
+    align(X,uv,t) = (X-curve(uv,t))'*dcurve(uv,t)
+    dalign(X,uv,t) = ForwardDiff.derivative(uv->align(X,uv,t),uv)
+    return function(X,uv,t) # Newton step to alignment root
+        step=align(X,uv,t)/dalign(X,uv,t)
+        ifelse(isnan(step),uv,clamp(uv-step,lims...))
+    end
+end
+
+using KernelAbstractions
+update!(l::HashedLocator,surf,t,samples=l.lims)=(_update!(get_backend(l.hash),64)(l.hash,l.refine,surf,l.lower,l.step,samples,t,ndrange=size(l.hash));l)
+@kernel function _update!(a::AbstractArray{T,N},refine,surf,@Const(lower),@Const(step),@Const(samples),@Const(t)) where {T,N}
+    # Map index to physical space
+    I = @index(Global,Cartesian)
+    x = step*(SVector{N,T}(I.I...) .-1)+lower
+
+    # Grid search for uv within bounds
+    @inline dis2(uv) = (q=x-surf(uv,t); q'*q)
+    uv = a[I]; d = dis2(uv)
+    for uvᵢ in samples
+        dᵢ = dis2(uvᵢ)
+        dᵢ<d && (uv=uvᵢ; d=dᵢ)
+    end
+    
+    # Refine estimate with clamped Newton step
+    a[I] = refine(x,uv,t)
 end
 
 function (l::HashedLocator)(x,t)
     # Map location to hash index and clamp to within domain
     hash_index = (x-l.lower)/l.step .+ 1
-    clamped = clamp.(hash_index,1,size(l.uv_hash) .- 0.5f0)
+    clamped = clamp.(hash_index,1,size(l.hash) .- 0.5f0)
 
     # Interpolate hash and return if index is outside domain
-    uv = interp(clamped,l.uv_hash)
+    uv = interp(clamped,l.hash)
     hash_index != clamped && return uv
 
-    # Otherwise, refine uv estimate with NewtonStep
-    return NewtonStep!(uv,l,x,t)
+    # Otherwise, refine estimate with Newton step
+    return l.refine(x,uv,t)
 end
 
 function interp(x::SVector{D}, arr::AbstractArray{T,D}) where {D,T}

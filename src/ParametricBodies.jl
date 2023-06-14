@@ -40,8 +40,8 @@ function norm_dir(surf,uv::Number,t)
     return SA[s[2],-s[1]]
 end
 
-ParametricBody(surf,uv_bounds,lower,upper;step=1,t⁰=0.,T=Float64,mem=Array,map=(x,t)->x) = 
-    ParametricBody(surf,HashedLocator(surf,uv_bounds,lower,upper;step,t⁰,T,mem),map,lower)
+ParametricBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float64,mem=Array,map=(x,t)->x) = 
+    ParametricBody(surf,HashedLocator(surf,uv_bounds;step,t⁰,T,mem),map)
 
 update!(body::ParametricBody{F,L},t) where {F<:Function,L<:HashedLocator} = 
     update!(body.locate,body.surf,t)
