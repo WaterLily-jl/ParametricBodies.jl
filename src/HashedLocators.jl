@@ -4,26 +4,29 @@ struct HashedLocator{T,F<:Function,A<:AbstractArray{T,2}}
     hash::A
     lower::SVector{2,T}
     step::T
-    function HashedLocator(curve,lims;t⁰=0,step=1,T=Float64,mem=Array)
-        # Apply type and get refinement function
-        lims,t⁰,step = T.(lims),T(t⁰),T(step)
-        f = refine(curve,lims)
+end
+using Adapt
+Adapt.adapt_structure(to, x::HashedLocator) = HashedLocator(x.refine,x.lims,adapt(to,x.hash),x.lower,x.step)
 
-        # Get curve's bounding box
-        samples = range(lims...,20)
-        lower = upper = curve(first(samples),t⁰)
-        @assert isa(lower,SVector{2,T}) "`curve` is not type stable"
-        for uv in samples
-            x = curve(uv,t⁰)
-            lower = min.(lower,x)
-            upper = max.(upper,x)
-        end
+function HashedLocator(curve,lims;t⁰=0,step=1,T=Float64,mem=Array)
+    # Apply type and get refinement function
+    lims,t⁰,step = T.(lims),T(t⁰),T(step)
+    f = refine(curve,lims)
 
-        # Allocate hash and struct, and update hash
-        hash = fill(first(lims),ceil.(Int,(upper-lower)/step .+ 3)...) |> mem
-        l=new{T,typeof(f),typeof(hash)}(f,lims,hash,lower.-step,step)
-        update!(l,curve,t⁰,samples)
+    # Get curve's bounding box
+    samples = range(lims...,20)
+    lower = upper = curve(first(samples),t⁰)
+    @assert isa(lower,SVector{2,T}) "`curve` is not type stable"
+    for uv in samples
+        x = curve(uv,t⁰)
+        lower = min.(lower,x)
+        upper = max.(upper,x)
     end
+
+    # Allocate hash and struct, and update hash
+    hash = fill(first(lims),ceil.(Int,(upper-lower)/step .+ 3)...) |> mem
+    l=adapt(mem,HashedLocator{T,typeof(f),typeof(hash)}(f,lims,hash,lower.-step,step))
+    update!(l,curve,t⁰,samples)
 end
 
 function refine(curve,lims)
@@ -38,22 +41,22 @@ function refine(curve,lims)
 end
 
 using KernelAbstractions
-update!(l::HashedLocator,surf,t,samples=l.lims)=(_update!(get_backend(l.hash),64)(l.hash,l.refine,surf,l.lower,l.step,samples,t,ndrange=size(l.hash));l)
-@kernel function _update!(a::AbstractArray{T,N},refine,surf,@Const(lower),@Const(step),@Const(samples),@Const(t)) where {T,N}
+update!(l::HashedLocator,surf,t,samples=l.lims)=(_update!(get_backend(l.hash),64)(l,surf,samples,t,ndrange=size(l.hash));l)
+@kernel function _update!(l::HashedLocator{T},surf,@Const(samples),@Const(t)) where T
     # Map index to physical space
     I = @index(Global,Cartesian)
-    x = step*(SVector{N,T}(I.I...) .-1)+lower
+    x = l.step*(SVector{2,T}(I.I...) .-1)+l.lower
 
     # Grid search for uv within bounds
     @inline dis2(uv) = (q=x-surf(uv,t); q'*q)
-    uv = a[I]; d = dis2(uv)
+    uv = l.hash[I]; d = dis2(uv)
     for uvᵢ in samples
         dᵢ = dis2(uvᵢ)
         dᵢ<d && (uv=uvᵢ; d=dᵢ)
     end
     
     # Refine estimate with clamped Newton step
-    a[I] = refine(x,uv,t)
+    l.hash[I] = l.refine(x,uv,t)
 end
 
 function (l::HashedLocator)(x,t)

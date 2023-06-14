@@ -21,7 +21,7 @@ using StaticArrays
 
     # use mapping to double and move circle
     U=0.1; map(x,t)=(x-SA[U*t,0])/2
-    body = ParametricBody(surf,locate,map)
+    body = ParametricBody(surf,locate;map)
     d,n,V = measure(body,SA[4U,-2.1],4.)
     @test d ≈ 0.1
     @test n ≈ SA[0,-1]
