@@ -5,7 +5,6 @@ struct HashedLocator{T,F<:Function,A<:AbstractArray{T,2}}
     lower::SVector{2,T}
     step::T
 end
-using Adapt
 Adapt.adapt_structure(to, x::HashedLocator) = HashedLocator(x.refine,x.lims,adapt(to,x.hash),x.lower,x.step)
 
 function HashedLocator(curve,lims;t⁰=0,step=1,T=Float64,mem=Array)
@@ -40,7 +39,6 @@ function refine(curve,lims)
     end
 end
 
-using KernelAbstractions
 update!(l::HashedLocator,surf,t,samples=l.lims)=(_update!(get_backend(l.hash),64)(l,surf,samples,t,ndrange=size(l.hash));l)
 @kernel function _update!(l::HashedLocator{T},surf,@Const(samples),@Const(t)) where T
     # Map index to physical space

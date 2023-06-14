@@ -1,6 +1,8 @@
 module ParametricBodies
 
 using StaticArrays,ForwardDiff
+using CUDA,Adapt,KernelAbstractions
+
 include("HashedLocators.jl")
 export HashedLocator
 
@@ -13,7 +15,8 @@ struct ParametricBody{T,S<:Function,L<:Union{Function,HashedLocator},M<:Function
 end
 function ParametricBody(surf,locate;map=(x,t)->x,T=Float64)
     # Check input functions
-    x,t = SVector{2,T}(0,0),T(0); ξ = map(x,t); uv = locate(ξ,t); p = ξ-surf(uv,t)
+    x,t = SVector{2,T}(0,0),T(0); ξ = map(x,t)
+    @CUDA.allowscalar uv = locate(ξ,t); p = ξ-surf(uv,t)
     @assert isa(ξ,SVector{2,T}) "map is not type stable"
     @assert isa(uv,T) "locate is not type stable"
     @assert isa(p,SVector{2,T}) "surf is not type stable"
@@ -24,7 +27,7 @@ end
 import LinearAlgebra: det
 get_scale(map,x::SVector{D},t=0.) where D = (dξdx=ForwardDiff.jacobian(x->map(x,t),x); abs(det(dξdx))^(-1/D))
 
-function measure(body::ParametricBody{T},x::SVector{N,T},t::T) where {N,T}
+function measure(body::ParametricBody,x,t)
     # Compute n=∇sdf. This must include ∇uv, so uv can't be input
     n = ForwardDiff.gradient(x->sdf(body,x,t), x) 
 
@@ -38,7 +41,7 @@ function measure(body::ParametricBody{T},x::SVector{N,T},t::T) where {N,T}
     return (d,n,dξdx\dξdt)
 end
 
-function sdf(body::ParametricBody{T},x::SVector{N,xT},t::T;uv=body.locate(body.map(x,t),t)) where {N,T,xT<:Union{T,ForwardDiff.Dual}}
+function sdf(body::ParametricBody,x,t;uv=body.locate(body.map(x,t),t))
     p = body.map(x,t)-body.surf(uv,t)
     return body.scale*copysign(√(p'*p),norm_dir(body.surf,uv,t)'*p)
 end
@@ -57,6 +60,6 @@ ParametricBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float64,mem=Array,map=(x,t
 update!(body::ParametricBody{T,F,L},t) where {T,F,L<:HashedLocator} = 
     update!(body.locate,body.surf,t)
 
-export ParametricBody
+export ParametricBody,measure,sdf
 
 end
