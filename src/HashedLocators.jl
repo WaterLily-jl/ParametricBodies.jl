@@ -61,7 +61,7 @@ end
 function (l::HashedLocator)(x,t)
     # Map location to hash index and clamp to within domain
     hash_index = (x-l.lower)/l.step .+ 1
-    clamped = clamp.(hash_index,1,size(l.hash) .- 0.5f0)
+    clamped = clamp.(hash_index,1,size(l.hash))
 
     # Interpolate hash and return if index is outside domain
     uv = interp(clamped,l.hash)
@@ -73,7 +73,7 @@ end
 
 function interp(x::SVector{D}, arr::AbstractArray{T,D}) where {D,T}
     # Index below the interpolation coordinate and the difference
-    i = floor.(Int,x); y = x-i
+    i = min.(floor.(Int,x),size(arr).-1); y = x-i
 
     # CartesianIndices around x 
     I = CartesianIndex(i...); R = I:I+oneunit(I)
