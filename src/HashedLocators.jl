@@ -34,7 +34,7 @@ function refine(curve,lims)
     align(X,uv,t) = (X-curve(uv,t))'*dcurve(uv,t)
     dalign(X,uv,t) = ForwardDiff.derivative(uv->align(X,uv,t),uv)
     return function(X,uv,t) # Newton step to alignment root
-        step=align(X,uv,t)/dalign(X,uv,t)
+        step=align(X,uv,t)*clamp(1/dalign(X,uv,t),-2,2)
         ifelse(isnan(step),uv,clamp(uv-step,lims...))
     end
 end

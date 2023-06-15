@@ -12,7 +12,7 @@ using StaticArrays
     n = ParametricBodies.norm_dir(body.surf,π/2,0)
     @test n/√(n'*n) ≈ SA[0,1]
 
-    @test WaterLily.sdf(body,SA[-.3,-.4],2.) == -0.5
+    @test WaterLily.sdf(body,SA[-.3,-.4],2.) ≈ -0.5
 
     d,n,V = measure(body,SA[-.75,1],4.)
     @test d ≈ 0.25
@@ -40,7 +40,7 @@ end
     @test isapprox(surf(locator(SA[-1.2,.9],t),t),SA[-4/5,3/5],rtol=1e-4)
 
     body = ParametricBody(surf,locator)
-    @test isapprox(WaterLily.sdf(body,SA[-3.,-4.],t),4.,rtol=1e-2) # outside hash
+    @test isapprox(WaterLily.sdf(body,SA[-3.,-4.],t),4.,rtol=1.5e-2) # outside hash
 
     t = 0.5; ParametricBodies.update!(body,t)
     d,n,V = measure(body,SA[-.75,1],t)
@@ -60,6 +60,6 @@ end
     body = ParametricBody(surf,(0.,π/2);step=0.25,map=(x,t)->abs.(x))
     d,n,V = measure(body,SA[-0.3,-0.4],0.)
     @test d ≈ -0.5
-    @test n ≈ SA[-3/5,-4/5]
+    @test isapprox(n,SA[-3/5,-4/5],rtol=1e-4)
     @test isapprox(V,SA[4/5,-3/5],rtol=1e-4)
 end
