@@ -28,23 +28,31 @@ import LinearAlgebra: det
 get_scale(map,x::SVector{D},t=0.) where D = (dξdx=ForwardDiff.jacobian(x->map(x,t),x); abs(det(dξdx))^(-1/D))
 
 function measure(body::ParametricBody,x,t)
-    # Compute n=∇sdf. This must include ∇uv, so uv can't be input
-    n = ForwardDiff.gradient(x->sdf(body,x,t), x) 
-
-    # Precompute uv(x,t) and compute distance 
-    uv = body.locate(body.map(x,t),t)
-    d = sdf(body,x,t;uv)
-
-    # Expand V = dx/dt = (dξ/dx)\(dξ/dt) to avoid defining map⁻¹
-    dξdx = ForwardDiff.jacobian(x->body.map(x,t),x)
+    # Surf props and velocity in ξ-frame
+    d,n,uv = surf_props(body,x,t)
     dξdt = ForwardDiff.derivative(t->body.surf(uv,t)-body.map(x,t),t)
-    return (d,n,dξdx\dξdt)
-end
 
-function sdf(body::ParametricBody,x,t;uv=body.locate(body.map(x,t),t))
-    p = body.map(x,t)-body.surf(uv,t)
-    return body.scale*copysign(√(p'*p),norm_dir(body.surf,uv,t)'*p)
+    # Convert to x-frame with dξ/dx⁻¹ (d has already been scaled)
+    dξdx = ForwardDiff.jacobian(x->body.map(x,t),x)
+    return (d,dξdx\n/body.scale,dξdx\dξdt)
 end
+sdf(body::ParametricBody,x,t) = surf_props(body,x,t)[1]
+
+function surf_props(body::ParametricBody,x,t)
+    # Map to ξ and locate nearest uv
+    ξ = body.map(x,t)
+    uv = body.locate(ξ,t)
+
+    # Get normal direction and vector from surf to ξ
+    n = norm_dir(body.surf,uv,t)
+    p = ξ-body.surf(uv,t)
+
+    # Fix direction for C⁰ points, normalize, and get distance
+    notC¹(body.locate,uv) && (n = p)
+    n /=  √(n'*n)
+    return (body.scale*n'*p,n,uv)
+end
+notC¹(::Function,uv) = false
 
 function norm_dir(surf,uv::Number,t)
     s = ForwardDiff.derivative(uv->surf(uv,t),uv)

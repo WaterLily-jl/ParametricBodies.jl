@@ -38,6 +38,7 @@ function refine(curve,lims)
         ifelse(isnan(step),uv,clamp(uv-step,lims...))
     end
 end
+notC¹(l::HashedLocator,uv) = any(uv.≈l.lims)
 
 update!(l::HashedLocator,surf,t,samples=l.lims)=(_update!(get_backend(l.hash),64)(l,surf,samples,t,ndrange=size(l.hash));l)
 @kernel function _update!(l::HashedLocator{T},surf,@Const(samples),@Const(t)) where T
