@@ -7,7 +7,7 @@ struct HashedLocator{T,F<:Function,A<:AbstractArray{T,2}}
 end
 Adapt.adapt_structure(to, x::HashedLocator) = HashedLocator(x.refine,x.lims,adapt(to,x.hash),x.lower,x.step)
 
-function HashedLocator(curve,lims;t⁰=0,step=1,T=Float64,mem=Array)
+function HashedLocator(curve,lims;t⁰=0,step=1,buff=2,T=Float64,mem=Array)
     # Apply type and get refinement function
     lims,t⁰,step = T.(lims),T(t⁰),T(step)
     f = refine(curve,lims)
@@ -23,8 +23,8 @@ function HashedLocator(curve,lims;t⁰=0,step=1,T=Float64,mem=Array)
     end
 
     # Allocate hash and struct, and update hash
-    hash = fill(first(lims),ceil.(Int,(upper-lower)/step .+ 3)...) |> mem
-    l=adapt(mem,HashedLocator{T,typeof(f),typeof(hash)}(f,lims,hash,lower.-step,step))
+    hash = fill(first(lims),ceil.(Int,(upper-lower)/step .+ (1+2buff))...) |> mem
+    l=adapt(mem,HashedLocator{T,typeof(f),typeof(hash)}(f,lims,hash,lower.-buff*step,step))
     update!(l,curve,t⁰,samples)
 end
 

@@ -48,7 +48,7 @@ function surf_props(body::ParametricBody,x,t)
     p = ξ-body.surf(uv,t)
 
     # Fix direction for C⁰ points, normalize, and get distance
-    notC¹(body.locate,uv) && (n = p)
+    notC¹(body.locate,uv) && p'*p>0 && (n = p)
     n /=  √(n'*n)
     return (body.scale*n'*p,n,uv)
 end
