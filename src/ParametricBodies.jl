@@ -7,6 +7,31 @@ include("HashedLocators.jl")
 export HashedLocator
 
 import WaterLily: AbstractBody,measure,sdf
+"""
+    ParametricBody{T::Real}(surf,locate,map=(x,t)->x,scale=|∇map|⁻¹) <: AbstractBody
+
+    - `surf(uv::T,t::T)::SVector{2,T}:` parametrically define curve
+    - `locate(ξ::SVector{2,T},t::T):` method to find nearest parameter `uv` to `ξ`
+    - `map(x::SVector{2,T},t::T)::SVector{2,T}:` mapping from `x` to `ξ`
+    - `scale::T`: distance scaling from `ξ` to `x`.
+
+Explicitly defines a geometries by an unsteady parametric curve and optional coordinate `map`.
+The curve is currently limited to be 2D, and must wind counter-clockwise. Any distance scaling
+induced by the map needs to be uniform and `scale` is computed automatically unless supplied.
+
+Example:
+
+    surf(θ,t) = SA[cos(θ+t),sin(θ+t)]
+    locate(x::SVector{2},t) = atan(x[2],x[1])-t
+    body = ParametricBody(surf,locate)
+
+    @test body.surf(body.locate(SA[4.,3.],1),1) == SA[4/5,3/5]
+
+    d,n,V = measure(body,SA[-.75,1],4.)
+    @test d ≈ 0.25
+    @test n ≈ SA[-3/5, 4/5]
+    @test V ≈ SA[-4/5,-3/5]
+"""
 struct ParametricBody{T,S<:Function,L<:Union{Function,HashedLocator},M<:Function} <: AbstractBody
     surf::S    #ξ = surf(uv,t)
     locate::L  #uv = locate(ξ,t)
@@ -27,6 +52,12 @@ end
 import LinearAlgebra: det
 get_scale(map,x::SVector{D},t=0.) where D = (dξdx=ForwardDiff.jacobian(x->map(x,t),x); abs(det(dξdx))^(-1/D))
 
+"""
+    d,n,V = measure(body::ParametricBody,x,t)
+
+Determine the geometric properties of body.surf at time `t` closest to 
+point `x`. Both `dot(surf)` and `dot(map)` contribute to `V`.
+"""
 function measure(body::ParametricBody,x,t)
     # Surf props and velocity in ξ-frame
     d,n,uv = surf_props(body,x,t)
@@ -36,10 +67,16 @@ function measure(body::ParametricBody,x,t)
     dξdx = ForwardDiff.jacobian(x->body.map(x,t),x)
     return (d,dξdx\n/body.scale,dξdx\dξdt)
 end
+"""
+    d = sdf(body::ParametricBody,x,t)
+
+Signed distance from `x` to closest point on `body.surf` at time `t`. Sign depends on the
+winding direction of the parametric curve.
+"""
 sdf(body::ParametricBody,x,t) = surf_props(body,x,t)[1]
 
 function surf_props(body::ParametricBody,x,t)
-    # Map to ξ and locate nearest uv
+    # Map x to ξ and locate nearest uv
     ξ = body.map(x,t)
     uv = body.locate(ξ,t)
 
@@ -62,6 +99,11 @@ end
 Adapt.adapt_structure(to, x::ParametricBody{T,F,L}) where {T,F,L<:HashedLocator} =
     ParametricBody(x.surf,adapt(to,x.locate),x.map,x.scale)
 
+"""
+    ParametricBody(surf,uv_bounds;step,t⁰,T,mem,map) <: AbstractBody
+
+Creates a `ParametricBody` with `locate=HashedLocator(surf,uv_bounds...)`.
+"""
 ParametricBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float64,mem=Array,map=(x,t)->x) = 
     adapt(mem,ParametricBody(surf,HashedLocator(surf,uv_bounds;step,t⁰,T,mem);map,T))
 
