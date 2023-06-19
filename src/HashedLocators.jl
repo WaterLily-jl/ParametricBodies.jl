@@ -7,8 +7,16 @@
     - `lower::SVector{2,T}:` bottom corner of the hash in ξ-space
     - `step::T:` ξ-resolution of the hash
 
-Type to preform efficient and fairly stable `locate`ing on parametric curves by interpolating a 
-close initial guess from a x->uv `hash`, and `refine`ing that IC with a bounded Newton method.
+Type to preform efficient and fairly stable `locate`ing on parametric curves. Newton's method is fast, 
+but can be very unstable for general parametric curves. This is mitigated by supplying a close initial 
+`uv` guess by interpolating `hash``, and by bounding the derivative adjustment in the Newton `refine`ment.
+
+----
+
+    HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
+
+Creates HashedLocator by sampling the curve and finding the bounding box. This box is expanded by the amount `buffer`. 
+The hash array is allocated to span the box with resolution `step` and initialized using `update!(::,curve,t⁰,samples)`.
 
 Example:
 
@@ -31,12 +39,6 @@ struct HashedLocator{T,F<:Function,A<:AbstractArray{T,2}}
 end
 Adapt.adapt_structure(to, x::HashedLocator) = HashedLocator(x.refine,x.lims,adapt(to,x.hash),x.lower,x.step)
 
-"""
-    HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
-
-Creates HashedLocator by sampling the curve and finding the bounding box. This box is expanded by the amount `buffer`. 
-The hash array is allocated to span the box with resolution `step` and initialized using `update!(::,curve,t⁰,samples)`.
-"""
 function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
     # Apply type and get refinement function
     lims,t⁰,step = T.(lims),T(t⁰),T(step)
@@ -96,10 +98,9 @@ end
 """
     (l::HashedLocator)(x,t)
 
-Newton's method is fast, but can be very unstable for general parametric curves.
-This is mitigated by supplying a close initial `uv` guess by interpolating the
-hash, and by bounding the derivative adjustment in the Newton refinement.
-If supplied `x` is outside `l.hash`, no refinement step is performed.
+Estimate the parameter value `uv⁺ = argmin_uv (X-curve(uv,t))²` in two steps:
+1. Interploate an initial guess  `uv=l.hash(x)`. Return `uv⁺~uv` if `x` is outside the hash domain.
+2. Apply a bounded Newton step `uv⁺≈l.refine(x,uv,t)` to refine the estimate.
 """
 function (l::HashedLocator)(x,t)
     # Map location to hash index and clamp to within domain

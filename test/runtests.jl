@@ -34,7 +34,7 @@ end
     @test typeof(locator(SA_F32[0,1],0.f0))==Float32
 
     t = 0.
-    locator = HashedLocator(surf,(0.,2π),t⁰=t,step=0.25)
+    locator = HashedLocator(surf,(0.,2π),t⁰=t,step=0.25,buffer=1)
     @test isapprox(locator.lower,SA[-1.25,-1.25],rtol=0.01)
     @test isapprox(locator(SA[.3,.4],t),atan(4,3),rtol=1e-4)
     @test isapprox(surf(locator(SA[-1.2,.9],t),t),SA[-4/5,3/5],rtol=1e-4)
