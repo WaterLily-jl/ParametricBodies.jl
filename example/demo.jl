@@ -6,9 +6,8 @@ function make_sim(;L=32,Re=1e3,St=0.3,αₘ=-π/18,U=1,n=8,m=4,T=Float32,mem=Arr
     θ₀ = T(αₘ+atan(π*St)); h₀=T(L); ω=T(π*St*U/h₀)
     function map(x,t)
         back = x[1]>nose[1]+2L       # back body?
-        ϕ = ifelse(back,5.5f0,0)     # phase shift
-        S = ifelse(back,3L,0)        # horizontal shift
-
+        ϕ = back ? 5.5f0 : 0         # phase shift
+        S = back ? 3L : 0            # horizontal shift
         θ = θ₀*cos(ω*t+ϕ); R = SA[cos(θ) -sin(θ); sin(θ) cos(θ)]
         h = SA[S,h₀*sin(ω*t+ϕ)]
         ξ = R*(x-nose-h-pivot)+pivot # move to origin and align with x-axis
@@ -31,7 +30,7 @@ function make_sim(;L=32,Re=1e3,St=0.3,αₘ=-π/18,U=1,n=8,m=4,T=Float32,mem=Arr
 
     Simulation((n*L,m*L),(U,0),L;ν=U*L/Re,body,T,mem)
 end
-using CUDA; CUDA.functional()
+using CUDA; @assert CUDA.functional()
 include("viz.jl");Makie.inline!(false);
 
 sim = make_sim(mem=CuArray);
