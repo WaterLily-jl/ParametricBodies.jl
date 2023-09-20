@@ -2,15 +2,6 @@ using WaterLily,StaticArrays
 using ParametricBodies # New package
 using Plots
 
-# Define spline control points. Something similar to a foil.
-cps = hcat(
-    [1.0, 0.0],
-    [0.5, 0.1],
-    [0.0, 0.0],
-    [0.5, -0.1],
-    [1.0, 0.0]
-)
-
 function coxDeBoor(knots, u, k, d, count)
     """
         coxDeBoor(knots, u, k, d, count)
@@ -37,7 +28,7 @@ function coxDeBoor(knots, u, k, d, count)
         + ((knots[k+d+2]-u)/max(1e-12, knots[k+d+2]-knots[k+2]))*coxDeBoor(knots, u, (k+1), (d-1), count))
 end
 
-function bspline(cv, s; d=3)
+function bspline(cv, s; d=1)
     """
         bspline(cv, s; d=3)
 
@@ -65,7 +56,7 @@ function bspline(cv, s; d=3)
     return pt
 end
 
-function evaluate_spline(cps, s)
+function evaluate_spline(cps, s; d=1)
     """
         evaluate_spline(cps, s)
 
@@ -83,8 +74,85 @@ function evaluate_spline(cps, s)
     Note:
     - This function assumes a column-major orientation of points as Julia gods intended.
     """
-    return hcat([bspline(cps, u, d=2) for u in s]...)
+    return hcat([bspline(cps, u, d=d) for u in s]...)
 end
+
+using CUDA; @assert CUDA.functional()
+
+
+# Define spline control points. Square using d=1.
+cps = hcat(
+    [0.0, 0.5],
+    [0.5, 0.5],
+    [0.5, 0.0],
+    [0.5, -0.5],
+    [0.0, -0.5],
+    [-0.5, -0.5],
+    [-0.5, 0.0],
+    [-0.5, 0.5],
+    [0.0, 0.5]
+)
+
+# Plot the body shape before doing anything else.
+s = 0:0.01:1
+xy = evaluate_spline(cps, s)
+Plots.plot(xy[1, :], xy[2, :], label="", color=:red, lw=2,
+    aspect_ratio=:equal, xlabel="x", ylabel="y", dpi=200, size=(1200, 600))
+Plots.plot!(cps[1, :], cps[2, :], marker=:circle, linestyle=:dash, label="", color=:black, alpha=0.5, lw=2)
+Plots.savefig("complex_body_shape_test.png")
+
+# Plot the contours of signed distance function.
+function square_sdf(x, y, L)
+    # Calculate the distances to the edges of the square
+    dx = abs(x) - L / 2
+    dy = abs(y) - L / 2
+
+    # Calculate the SDF value based on the distances
+    if dx <= 0 && dy <= 0
+        # Inside the square
+        return max(dx, dy)
+    else
+        # Outside the square
+        return sqrt(max(dx, 0)^2 + max(dy, 0)^2)
+    end
+end
+
+x = -1.0:0.05:1.0
+y = -1.0:0.045:1.0
+z = zeros(length(x), length(y))
+for i in range(1, length(x))
+    for j in range(1, length(y))
+        z[i, j] = square_sdf(x[i], y[j], 1.0)
+    end
+end
+Plots.contourf(y, x, z, levels=vcat(-0.5:0.1:0.5), color=:bwr)
+Plots.plot!(xy[1, :], xy[2, :], label="", color=:black, lw=2,
+    aspect_ratio=:equal, xlabel="x", ylabel="y", dpi=200, size=(1200, 600))
+Plots.plot!(cps[1, :], cps[2, :], marker=:circle, linestyle=:dash, label="", color=:black, alpha=0.5, lw=2)
+Plots.savefig("complex_body_shape_test_distFunction.png")
+
+# Function for moving the body.
+function map(x,t)
+    # move to the desired position
+    ξ = x-position
+    # Return the transformed coordinate.
+    return SA[ξ[1], ξ[2]]
+end
+
+# Define a function that creates the shape of the body
+function some_shape(s, t)
+    # Compute the body coordinate for the given s-parameter value.
+    return bspline(cps, s)
+end
+
+# Wrap the shape function inside the parametric body class.
+# TODO this fails with: LoadError: AssertionError: `curve` is not type stable
+body = ParametricBody(some_shape, (0,1); map, T=Float32, mem=CuArray)
+
+# The code below can be used to make an actual simulation using the body once it's been fixed.
+#=
+# Create the simulation and try to make it work.
+include("viz.jl");Makie.inline!(false);
 
 function make_sim(;L=32,Re=1e3,St=0.3,αₘ=-π/18,U=1,n=8,m=4,T=Float32,mem=Array)
     # Position of the body.
@@ -110,19 +178,6 @@ function make_sim(;L=32,Re=1e3,St=0.3,αₘ=-π/18,U=1,n=8,m=4,T=Float32,mem=Arr
     Simulation((n*L, m*L), (U, 0), L; ν=U*L/Re, body, T, mem)
 end
 
-using CUDA; @assert CUDA.functional()
-
-# Plot the body shape before doing anything else.
-s = 0:0.01:1
-xy = evaluate_spline(cps, s)
-Plots.plot(xy[1, :], xy[2, :], label="", color=:red, lw=2,
-    aspect_ratio=:equal, xlabel="x", ylabel="y", dpi=200, size=(1200, 600))
-Plots.plot!(cps[1, :], cps[2, :], marker=:circle, linestyle=:dash, label="", color=:black, alpha=0.5, lw=2)
-Plots.savefig("complex_body_shape_test.png")
-
-# Create the simulation and try to make it work.
-include("viz.jl");Makie.inline!(false);
-
 sim = make_sim(mem=CuArray);
 fig,viz = body_omega_fig(sim);fig
 for _ in 1:200
@@ -139,3 +194,4 @@ function make_video(L=128,St=0.3,name="out.mp4")
         update!(viz,sim)
     end
 end
+=#
