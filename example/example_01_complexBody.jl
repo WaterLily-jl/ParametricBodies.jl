@@ -90,18 +90,23 @@ cps = [0 5
 # Check bspline is type stable. Note that using Float64 for cps will break this!
 @assert all([eltype(bspline(cps,zero(T),d=1))==T for T in (Float32,Float64)])
 
+# Plot the body shape
+using Plots
+s = 0:0.01:1
+xy = evaluate_spline(cps, s, d=1)
+Plots.plot(xy[1, :], xy[2, :], label="", color=:red, lw=2,
+    aspect_ratio=:equal, xlabel="x", ylabel="y", dpi=200, size=(1200, 600))
+Plots.plot!(cps[1, :], cps[2, :], marker=:circle, linestyle=:dash, label="", color=:black, alpha=0.5, lw=2)
+Plots.savefig("complex_body_shape_test.png")
+
 # Wrap the shape function inside the parametric body class.
 body = ParametricBody((s,t)->bspline(cps,s,d=1), (0,1))
 
+# Check accuracy of measure = d,n,v
+@show measure(body,[1,2],0) # should be [-3,[0,1],[0,0]]
+
 # using CUDA; @assert CUDA.functional()
 
-# # Plot the body shape before doing anything else.
-# s = 0:0.01:1
-# xy = evaluate_spline(cps, s, d=1)
-# Plots.plot(xy[1, :], xy[2, :], label="", color=:red, lw=2,
-#     aspect_ratio=:equal, xlabel="x", ylabel="y", dpi=200, size=(1200, 600))
-# Plots.plot!(cps[1, :], cps[2, :], marker=:circle, linestyle=:dash, label="", color=:black, alpha=0.5, lw=2)
-# Plots.savefig("complex_body_shape_test.png")
 
 # Plot the contours of signed distance function.
 # function square_sdf(x, y, L)
