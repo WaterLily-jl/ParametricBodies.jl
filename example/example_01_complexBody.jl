@@ -1,5 +1,3 @@
-using ParametricBodies
-
 function coxDeBoor(knots, u, k, d, count)
     """
         coxDeBoor(knots, u, k, d, count)
@@ -77,37 +75,34 @@ function evaluate_spline(cps, s; d=3)
 end
 
 # Define spline control points. Square using d=1.
-cps = [0 5
-    5 5
-    5 0
-    5 -5
-    0 -5
-    -5 -5
-    -5 0
-    -5 5
-    0 5]'
+using StaticArrays
+cps = SA[5 5 0 -5 -5 -5  0  5 5
+         0 5 5  5  0 -5 -5 -5 0]
 
 # Check bspline is type stable. Note that using Float64 for cps will break this!
 @assert all([eltype(bspline(cps,zero(T),d=1))==T for T in (Float32,Float64)])
 
-# Plot the body shape
-using Plots
-s = 0:0.01:1
-xy = evaluate_spline(cps, s, d=1)
-Plots.plot(xy[1, :], xy[2, :], label="", color=:red, lw=2,
-    aspect_ratio=:equal, xlabel="x", ylabel="y", dpi=200, size=(1200, 600))
-Plots.plot!(cps[1, :], cps[2, :], marker=:circle, linestyle=:dash, label="", color=:black, alpha=0.5, lw=2)
-Plots.savefig("complex_body_shape_test.png")
+# Create curve and heck winding direction
+curve(s,t) = bspline(cps,s,d=1)
+using LinearAlgebra
+cross(a,b) = det([a;;b])
+@assert all([cross(curve(s,0.),curve(s+0.1,0.))>0 for s in range(.9,10)])
 
-# Wrap the shape function inside the parametric body class.
-body = ParametricBody((s,t)->bspline(cps,s,d=1), (0,1))
+# Wrap the shape function inside the parametric body class and check measurements
+using ParametricBodies
+body = ParametricBody(curve, (0,1))
+@assert all(measure(body,[1,2],0) .≈ [-3,[0,1],[0,0]])
+@assert all(measure(body,[8,2],0) .≈ [3,[1,0],[0,0]])
 
-# Check accuracy of measure = d,n,v
-@show measure(body,[1,2],0) # should be [-3,[0,1],[0,0]]
+# Use mem=CUDA
+using CUDA; @assert CUDA.functional()
+#body = ParametricBody((θ,t) -> [cos(θ),sin(θ)],(0.,2π);step=0.25,T=Float32,mem=CUDA.CuArray) # does't work because HashedLocator requires SA output. 
+body = ParametricBody((θ,t) -> SA[cos(θ),sin(θ)],(0.,2π);step=0.25,T=Float32,mem=CUDA.CuArray) # works
+# body = ParametricBody(curve, (0,1); T=Float32, mem=CUDA.CuArray) # doesn't work. maybe need to `adapt` curve before using
+# @assert all(measure(body,[1,2],0) .≈ [-3,[0,1],[0,0]])
+# @assert all(measure(body,[8,2],0) .≈ [3,[1,0],[0,0]])
 
-# using CUDA; @assert CUDA.functional()
-
-
+2+2
 # Plot the contours of signed distance function.
 # function square_sdf(x, y, L)
 #     # Calculate the distances to the edges of the square

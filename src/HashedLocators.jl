@@ -48,6 +48,7 @@ function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
     samples = range(lims...,20)
     lower = upper = curve(first(samples),t⁰)
     @assert eltype(lower)==T "`curve` is not type stable"
+    @assert isa(curve(first(samples),t⁰),SVector{2,T}) "`curve` doesn't return a 2D SVector"
     for uv in samples
         x = curve(uv,t⁰)
         lower = min.(lower,x)
