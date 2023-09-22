@@ -43,7 +43,12 @@ function BSplineCurve(cps;degree=3)
     knots = [zeros(T,degree); collect(T,range(0, count-degree) / (count-degree)); ones(T,degree)]
     BSplineCurve(cps,SA[knots...],count,degree)
 end
-function (l::BSplineCurve)(s,t) # `t` is currently unused
+function (l::BSplineCurve)(s,t) 
+    ```
+    Evaluate the spline function
+    - `s` position along the spline
+    - `t` time is currently unused but needed for ParametricBodies
+    ```
     pt = zero(l.cps[:,1])
     for k in range(0, l.count-1)
         pt += coxDeBoor(l.knots, s, k, l.degree, l.count) * l.cps[:, k+1]
@@ -66,13 +71,16 @@ square = BSplineCurve(cps,degree=1)
 # Create curve and heck winding direction
 using LinearAlgebra
 cross(a,b) = det([a;;b])
-@assert all([cross(square(s,0.),square(s+0.1,0.))>0 for s in range(.9,10)])
+@assert all([cross(square(s,0.),square(s+0.1,0.))>0 for s in range(0,.9,10)])
 
 # Wrap the shape function inside the parametric body class and check measurements
 using ParametricBodies
 body = ParametricBody(square, (0,1));
 @assert all(measure(body,[1,2],0) .≈ [-3,[0,1],[0,0]])
 @assert all(measure(body,[8,2],0) .≈ [3,[1,0],[0,0]])
+
+# Check that the locator works for closed splines
+@assert [body.locate([5,s],0) for s ∈ (-2,-1,-0.1)]≈[0.95,0.975,0.9975]
 
 # Use mem=CUDA
 using CUDA; @assert CUDA.functional()
