@@ -24,34 +24,6 @@ function coxDeBoor(knots, u, k, d, count)
         + ((knots[k+d+2]-u)/max(√eps(u), knots[k+d+2]-knots[k+2]))*coxDeBoor(knots, u, (k+1), (d-1), count))
 end
 
-function bspline(cv, s::T; d=3) where T
-    """
-        bspline(cv, s; d=3)
-
-    Evaluate a B-spline curve at a given parameter value.
-
-    The `bspline` function evaluates a B-spline curve at the specified parameter `s`.
-
-    Arguments:
-    - `cv`: A 2D array representing the control points of the B-spline curve.
-    - `s`: The parameter value at which the B-spline curve should be evaluated.
-    - `d`: The degree of the B-spline curve (default is 3).
-
-    Returns:
-    A vector representing the point on the B-spline curve at parameter `s`.
-
-    Note:
-    - This function assumes a column-major orientation of points as Julia gods intended.
-    """
-    count = size(cv, 2)
-    knots = [zeros(T,d); collect(T,range(0, count-d) / (count-d)); ones(T,d)]
-    pt = zeros(T,size(cv, 1))
-    for k in range(0, count-1)
-        pt += coxDeBoor(knots, s, k, d, count) * cv[:, k+1]
-    end
-    return pt
-end
-
 """
     BSplineCurve(cps; degree=3, mem=Array)
 
@@ -66,14 +38,26 @@ An array where each column corresponds to a point on the B-spline curve at the p
 Note:
 - This function assumes a column-major orientation of points as Julia gods intended.
 """
-struct BSplineCurve{A<:AbstractArray} <: Function
+struct BSplineCurve{A<:AbstractArray,V<:AbstractVector} <: Function
     cps::A
+    knots::V
+    count::Int
     degree::Int
 end
-BSplineCurve(cps;degree=3) = BSplineCurve(cps,degree)
-(l::BSplineCurve)(s,t) = bspline(l.cps,s,d=l.degree)
+function BSplineCurve(cps;degree=3) 
+    count,T = size(cps, 2),promote_type(eltype(cps),Float32)
+    knots = [zeros(T,degree); collect(T,range(0, count-degree) / (count-degree)); ones(T,degree)]
+    BSplineCurve(cps,SA[knots...],count,degree)
+end
+function (l::BSplineCurve)(s,t) # `t` is currently unused
+    pt = zero(l.cps[:,1])
+    for k in range(0, l.count-1)
+        pt += coxDeBoor(l.knots, s, k, l.degree, l.count) * l.cps[:, k+1]
+    end
+    return pt
+end
 using Adapt
-Adapt.adapt_structure(to, x::BSplineCurve) = BSplineCurve(adapt(to,x.cps),x.degree)
+Adapt.adapt_structure(to, x::BSplineCurve) = BSplineCurve(adapt(to,x.cps),adapt(to,x.knots),x.count,x.degree)
 
 # Define square using degree=1 BSpline.
 using StaticArrays
@@ -92,7 +76,7 @@ cross(a,b) = det([a;;b])
 
 # Wrap the shape function inside the parametric body class and check measurements
 using ParametricBodies
-body = ParametricBody(square, (0,1))
+body = ParametricBody(square, (0,1));
 @assert all(measure(body,[1,2],0) .≈ [-3,[0,1],[0,0]])
 @assert all(measure(body,[8,2],0) .≈ [3,[1,0],[0,0]])
 
