@@ -52,53 +52,53 @@ function bspline(cv, s::T; d=3) where T
     return pt
 end
 
-function evaluate_spline(cps, s; d=3)
-    """
-        evaluate_spline(cps, s; d=3)
+"""
+    BSplineCurve(cps; degree=3, mem=Array)
 
-    Evaluate a B-spline curve at multiple parameter values.
+Define a B-spline curve.
+- `cps`: A 2D array representing the control points of the B-spline curve
+- `degree`: The degree of the B-spline curve
+- `mem`: Array memory type
 
-    The `evaluate_spline` function evaluates a B-spline curve at the specified parameter values `s`.
+Returns:
+An array where each column corresponds to a point on the B-spline curve at the parameter values in `s`.
 
-    Arguments:
-    - `cps`: A 2D array representing the control points of the B-spline curve.
-    - `s`: An array of parameter values at which the B-spline curve should be evaluated.
-    - `d`: The degree of the B-spline curve (default is 3).
-
-    Returns:
-    A 2D array where each column corresponds to a point on the B-spline curve at the parameter values in `s`.
-
-    Note:
-    - This function assumes a column-major orientation of points as Julia gods intended.
-    """
-    return hcat([bspline(cps, u, d=d) for u in s]...)
+Note:
+- This function assumes a column-major orientation of points as Julia gods intended.
+"""
+struct BSplineCurve{A<:AbstractArray} <: Function
+    cps::A
+    degree::Int
 end
+BSplineCurve(cps;degree=3) = BSplineCurve(cps,degree)
+(l::BSplineCurve)(s,t) = bspline(l.cps,s,d=l.degree)
+using Adapt
+Adapt.adapt_structure(to, x::BSplineCurve) = BSplineCurve(adapt(to,x.cps),x.degree)
 
-# Define spline control points. Square using d=1.
+# Define square using degree=1 BSpline.
 using StaticArrays
 cps = SA[5 5 0 -5 -5 -5  0  5 5
          0 5 5  5  0 -5 -5 -5 0]
+square = BSplineCurve(cps,degree=1)
 
 # Check bspline is type stable. Note that using Float64 for cps will break this!
-@assert all([eltype(bspline(cps,zero(T),d=1))==T for T in (Float32,Float64)])
+@assert isa(square(0.,0),SVector)
+@assert all([eltype(square(zero(T),0))==T for T in (Float32,Float64)])
 
 # Create curve and heck winding direction
-curve(s,t) = bspline(cps,s,d=1)
 using LinearAlgebra
 cross(a,b) = det([a;;b])
-@assert all([cross(curve(s,0.),curve(s+0.1,0.))>0 for s in range(.9,10)])
+@assert all([cross(square(s,0.),square(s+0.1,0.))>0 for s in range(.9,10)])
 
 # Wrap the shape function inside the parametric body class and check measurements
 using ParametricBodies
-body = ParametricBody(curve, (0,1))
+body = ParametricBody(square, (0,1))
 @assert all(measure(body,[1,2],0) .≈ [-3,[0,1],[0,0]])
 @assert all(measure(body,[8,2],0) .≈ [3,[1,0],[0,0]])
 
 # Use mem=CUDA
 using CUDA; @assert CUDA.functional()
-#body = ParametricBody((θ,t) -> [cos(θ),sin(θ)],(0.,2π);step=0.25,T=Float32,mem=CUDA.CuArray) # does't work because HashedLocator requires SA output. 
-body = ParametricBody((θ,t) -> SA[cos(θ),sin(θ)],(0.,2π);step=0.25,T=Float32,mem=CUDA.CuArray) # works
-# body = ParametricBody(curve, (0,1); T=Float32, mem=CUDA.CuArray) # doesn't work. maybe need to `adapt` curve before using
+body = ParametricBody(square, (0,1); T=Float32, mem=CUDA.CuArray) # doesn't work.
 # @assert all(measure(body,[1,2],0) .≈ [-3,[0,1],[0,0]])
 # @assert all(measure(body,[8,2],0) .≈ [3,[1,0],[0,0]])
 
