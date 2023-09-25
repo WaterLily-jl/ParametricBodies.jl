@@ -109,27 +109,11 @@ function (l::HashedLocator)(x,t)
     hash_index = (x-l.lower)/l.step .+ 1
     clamped = clamp.(hash_index,1,size(l.hash))
 
-    # Interpolate hash and return if index is outside domain
+    # Get hashed parameter and return if index is outside domain
     uv = l.hash[round.(Int,clamped)...]
-    # uv = interp(clamped,l.hash)
     hash_index != clamped && return uv
 
-    # Otherwise, refine estimate with Newton step
+    # Otherwise, refine estimate with two Newton steps
+    uv = l.refine(x,uv,t)
     return l.refine(x,uv,t)
-end
-
-function interp(x::SVector{D}, arr::AbstractArray{T,D}) where {D,T}
-    # Index below the interpolation coordinate and the difference
-    i = min.(floor.(Int,x),size(arr).-1); y = x-i
-
-    # CartesianIndices around x 
-    I = CartesianIndex(i...); R = I:I+oneunit(I)
-
-    # Linearly weighted sum over arr[R] (in serial)
-    s = zero(T)
-    @fastmath @inbounds @simd for J in R
-        weight = prod(@. ifelse(J.I==I.I,1-y,y))
-        s += arr[J]*weight
-    end
-    return s
 end

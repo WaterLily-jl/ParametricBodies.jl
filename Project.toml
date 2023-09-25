@@ -14,7 +14,8 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 WaterLily = "ed894a53-35f9-47f1-b17f-85db9237eebd"
 
 [compat]
-julia = "1"
+julia = "1.6"
+WaterLily = "1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
