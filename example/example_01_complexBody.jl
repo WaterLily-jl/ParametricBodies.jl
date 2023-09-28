@@ -23,26 +23,24 @@ Evaluate the spline function
 - `t` time is currently unused but needed for ParametricBodies
 """
 function (l::BSplineCurve{d})(u::T,t) where {T,d}
-    u==1 && return l.pnts[:,end]
     pt = SA{T}[0, 0]
     for k in 1:size(l.pnts, 2)
-        pt += Bd(l.knots,u,k,Val(d))*l.pnts[:,k]
+        l.knots[k]>u && break
+        l.knots[k+d+1]≥u && (pt += Bd(l.knots,u,k,Val(d))*l.pnts[:,k])
     end
     pt
 end
-Bd(knots, u, k, ::Val{0}) = 1
+
+Bd(knots, u, k, ::Val{0}) = Int(knots[k]≤u<knots[k+1] || u==knots[k+1]==1)
 function Bd(knots, u, k, ::Val{d}) where d
-    B = 0
-    knots[k]<u<knots[k+d] && (B+=(u-knots[k])/(knots[k+d]-knots[k])*Bd(knots,u,k,Val(d-1)))
-    knots[k+1]≤u<knots[k+d+1] && (B+=(knots[k+d+1]-u)/(knots[k+d+1]-knots[k+1])*Bd(knots,u,k+1,Val(d-1)))
-    return B
+    ((u-knots[k])/max(eps(Float32),knots[k+d]-knots[k])*Bd(knots,u,k,Val(d-1))
+    +(knots[k+d+1]-u)/max(eps(Float32),knots[k+d+1]-knots[k+1])*Bd(knots,u,k+1,Val(d-1)))
 end
 
 square = BSplineCurve(SA[5 5 0 -5 -5 -5  0  5 5
                          0 5 5  5  0 -5 -5 -5 0],degree=1)
-@assert square(0.,0) ≈ [5,0]
-@assert square(.5,0) ≈ [-5,0]
-@assert square(1.,0) ≈ [5,0]
+@assert square(1f0,0) ≈ square(0f0,0) ≈ [5,0]
+@assert square(.5f0,0) ≈ [-5,0]
 
 # Does it work with KernelAbstractions?
 using CUDA; @assert CUDA.functional()
@@ -71,9 +69,8 @@ cross(a,b) = det([a;;b])
 # check derivatives
 using ForwardDiff
 dcurve(u) = ForwardDiff.derivative(u->square(u,0),u)
-dcurve(0f0)
-dcurve(0.5f0)
-dcurve(1)
+@assert dcurve(0f0) ≈ [0,40]
+@assert dcurve(0.5f0) ≈ [0,-40]
 
 # Wrap the shape function inside the parametric body class and check measurements
 using ParametricBodies
@@ -82,7 +79,7 @@ body = ParametricBody(square, (0,1));
 @assert all(measure(body,[8,2],0) .≈ [3,[1,0],[0,0]])
 
 # Check that the locator works for closed splines
-@assert [body.locate([5,s],0) for s ∈ (-2,-1,-0.1)]≈[0.95,0.975,0.9975]
+@assert [body.locate(SA_F32[5,s],0) for s ∈ (-2,-1,-0.1)]≈[0.95,0.975,0.9975]
 
 # Does it work with ParametricBodies on CUDA?
 body = ParametricBody(square, (0,1); T=Float32);
