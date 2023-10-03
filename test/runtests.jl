@@ -1,7 +1,6 @@
 using WaterLily,ParametricBodies
-using Test
+using StaticArrays,Test
 
-using StaticArrays
 @testset "ParametricBodies.jl" begin
     surf(θ,t) = SA[cos(θ+t),sin(θ+t)]
     locate(x::SVector{2},t) = atan(x[2],x[1])-t
@@ -66,7 +65,7 @@ end
     @test isapprox(V,SA[4/5,-3/5],rtol=1e-4)
 end
 
-using LinearAlgebra,ForwardDiff
+using LinearAlgebra,ForwardDiff,CUDA
 @testset "NurbsCurves.jl" begin
     # make a square
     square = BSplineCurve(SA[5 5 0 -5 -5 -5  0  5 5
@@ -111,4 +110,10 @@ using LinearAlgebra,ForwardDiff
     @test all(measure(body,[-6,0],0) .≈ [1,[-1,0],[0,0]])
     @test all(measure(body,[ 5,5],0) .≈ [√(5^2+5^2)-5,[√2/2,√2/2],[0,0]])
     @test all(measure(body,[-5,5],0) .≈ [√(5^2+5^2)-5,[-√2/2,√2/2],[0,0]])
+
+    #Test on CUDA
+    if(CUDA.functional())
+        body = ParametricBody(circle, (0,1), T=Float32, mem=CuArray);
+        @CUDA.allowscalar @test all(measure(body,SA_F32[-6,0],0) .≈ [1,[-1,0],[0,0]])
+    end
 end
