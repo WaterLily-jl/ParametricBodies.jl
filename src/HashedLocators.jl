@@ -42,12 +42,13 @@ Adapt.adapt_structure(to, x::HashedLocator) = HashedLocator(x.refine,x.lims,adap
 function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
     # Apply type and get refinement function
     lims,t⁰,step = T.(lims),T(t⁰),T(step)
-    f = refine(curve,lims)
+    f = refine(curve,lims,curve(first(lims),t⁰)≈curve(last(lims),t⁰))
 
     # Get curve's bounding box
-    samples = range(lims...,20)
+    samples = range(lims...,64)
     lower = upper = curve(first(samples),t⁰)
-    @assert isa(lower,SVector{2,T}) "`curve` is not type stable"
+    @assert eltype(lower)==T "`curve` is not type stable"
+    @assert isa(curve(first(samples),t⁰),SVector{2,T}) "`curve` doesn't return a 2D SVector"
     for uv in samples
         x = curve(uv,t⁰)
         lower = min.(lower,x)
@@ -60,14 +61,15 @@ function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
     update!(l,curve,t⁰,samples)
 end
 
-function refine(curve,lims)
+@inline mymod(x,low,high) = low+mod(x-low,high-low)
+function refine(curve,lims,closed)::Function
     # uv⁺ = argmin_uv (X-curve(uv,t))² -> alignment(X,uv⁺,t))=0
     dcurve(uv,t) = ForwardDiff.derivative(uv->curve(uv,t),uv)
     align(X,uv,t) = (X-curve(uv,t))'*dcurve(uv,t)
     dalign(X,uv,t) = ForwardDiff.derivative(uv->align(X,uv,t),uv)
     return function(X,uv,t) # Newton step to alignment root
         step=align(X,uv,t)*clamp(1/dalign(X,uv,t),-2,2)
-        ifelse(isnan(step),uv,clamp(uv-step,lims...))
+        ifelse(isnan(step),uv,ifelse(closed,mymod(uv-step,lims...),clamp(uv-step,lims...)))
     end
 end
 notC¹(l::HashedLocator,uv) = any(uv.≈l.lims)
@@ -107,26 +109,11 @@ function (l::HashedLocator)(x,t)
     hash_index = (x-l.lower)/l.step .+ 1
     clamped = clamp.(hash_index,1,size(l.hash))
 
-    # Interpolate hash and return if index is outside domain
-    uv = interp(clamped,l.hash)
+    # Get hashed parameter and return if index is outside domain
+    uv = l.hash[round.(Int,clamped)...]
     hash_index != clamped && return uv
 
-    # Otherwise, refine estimate with Newton step
+    # Otherwise, refine estimate with two Newton steps
+    uv = l.refine(x,uv,t)
     return l.refine(x,uv,t)
-end
-
-function interp(x::SVector{D}, arr::AbstractArray{T,D}) where {D,T}
-    # Index below the interpolation coordinate and the difference
-    i = min.(floor.(Int,x),size(arr).-1); y = x-i
-
-    # CartesianIndices around x 
-    I = CartesianIndex(i...); R = I:I+oneunit(I)
-
-    # Linearly weighted sum over arr[R] (in serial)
-    s = zero(T)
-    @fastmath @inbounds @simd for J in R
-        weight = prod(@. ifelse(J.I==I.I,1-y,y))
-        s += arr[J]*weight
-    end
-    return s
 end

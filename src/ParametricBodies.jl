@@ -6,6 +6,9 @@ using CUDA,Adapt,KernelAbstractions
 include("HashedLocators.jl")
 export HashedLocator
 
+include("NurbsCurves.jl")
+export NurbsCurve, BSplineCurve
+
 import WaterLily: AbstractBody,measure,sdf
 """
     ParametricBody{T::Real}(surf,locate,map=(x,t)->x,scale=|∇map|⁻¹) <: AbstractBody
@@ -87,8 +90,9 @@ function surf_props(body::ParametricBody,x,t)
     # Fix direction for C⁰ points, normalize, and get distance
     notC¹(body.locate,uv) && p'*p>0 && (n = p)
     n /=  √(n'*n)
-    return (body.scale*n'*p,n,uv)
+    return (body.scale*dis(p,n),n,uv)
 end
+dis(p,n) = n'*p
 notC¹(::Function,uv) = false
 
 function norm_dir(surf,uv::Number,t)
