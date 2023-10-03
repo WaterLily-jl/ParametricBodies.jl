@@ -92,7 +92,7 @@ function surf_props(body::ParametricBody,x,t)
     n /=  √(n'*n)
     return (body.scale*dis(p,n),n,uv)
 end
-dis(p,n) = p'*n
+dis(p,n) = n'*p
 notC¹(::Function,uv) = false
 
 function norm_dir(surf,uv::Number,t)
