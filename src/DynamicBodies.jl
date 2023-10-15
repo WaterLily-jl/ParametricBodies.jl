@@ -9,9 +9,10 @@ Explicitly defines a geometries by an unsteady parametric curve. The curve is cu
 to be 2D, and must wind counter-clockwise. Any distance scaling induced by the map needs to be 
 uniform and `scale` is computed automatically unless supplied.
 """
-struct DynamicBody{T,S<:Function,L<:Union{Function,NurbsLocator}} <: AbstractParametricBody
+struct DynamicBody{T,S<:Function,L<:Union{Function,NurbsLocator},V<:Function} <: AbstractParametricBody
     surf::S    #ξ = surf(uv,t)
     locate::L  #uv = locate(ξ,t)
+    velocity::V # v = velocity(uv), defaults to v=0
     scale::T   #|dx/dξ| = scale
 end
 function DynamicBody(surf,locate;T=Float64)
@@ -20,8 +21,8 @@ function DynamicBody(surf,locate;T=Float64)
     @CUDA.allowscalar uv = locate(x,t); p = x-surf(uv,t)
     @assert isa(uv,T) "locate is not type stable"
     @assert isa(p,SVector{2,T}) "surf is not type stable"
-  
-    DynamicBody(surf,locate,T(1.0))
+    dsurf = copy(surf); dsurf.pnts .= 0.0 # zero velocity
+    DynamicBody(surf,locate,dsurf,T(1.0))
 end
 
 """
@@ -33,8 +34,10 @@ point `x`. Only `dot(surf)` contributes to `V`.
 function measure(body::DynamicBody,x,t)
     # Surf props and velocity in ξ-frame
     d,n,uv = surf_props(body,x,t)
-  
-    return (d,n,zero(n)) #(d,dξdx\n/body.scale,dξdx\dξdt)
+    
+    # for now zero velocity
+    v = body.velocity(uv,t)
+    return (d,n,v) #(d,dξdx\n/body.scale,dξdx\dξdt)
 end
 
 function surf_props(body::DynamicBody,ξ,t)
@@ -51,15 +54,19 @@ function surf_props(body::DynamicBody,ξ,t)
     return (dis(p,n),n,uv)
 end
 
-Adapt.adapt_structure(to, x::DynamicBody{T,F,L}) where {T,F,L<:NurbsLocator} =
-    DynamicBody(x.surf,adapt(to,x.locate))
+Adapt.adapt_structure(to, x::DynamicBody{T,F,L,V}) where {T,F,L<:NurbsLocator,V} =
+    DynamicBody(x.surf,adapt(to,x.locate),x.velocity,x.scale)
 """
     DynamicBody(surf,uv_bounds;step,t⁰,T,mem,map) <: AbstractBody
 
 Creates a `DynamicBody` with `locate=NurbsLocator(surf,uv_bounds...)`.
 """
 DynamicBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float64,mem=Array) = 
-    adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,T,mem),T))
-
-update!(body::DynamicBody{T,F,L},t) where {T,F,L<:NurbsLocator} = 
+    adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,T,mem),copy(surf),T(1.0)))
+update!(body::DynamicBody{T,F,L,V},t) where {T,F,L<:NurbsLocator,V} = 
     update!(body.locate,body.surf,t)
+function update!(body::DynamicBody{T,F,L,V},u::AbstractArray,Δt) where {T,F,L<:NurbsLocator,V}
+    body.velocity.pnts .= u./Δt
+    body.surf.pnts .+= u
+    update!(body.locate,body.surf,0.0)
+end

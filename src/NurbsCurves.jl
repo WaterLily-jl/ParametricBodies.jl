@@ -22,6 +22,7 @@ function NurbsCurve(pnts,knots,weights;degree=3)
     knots = SA{T}[knots...]; weights = SA{T}[weights...]
     NurbsCurve{degree,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights)
 end
+Base.copy(n::NurbsCurve) = NurbsCurve(copy(n.pnts),copy(n.knots),copy(n.wgts))
 
 """
     BSplineCurve(pnts; degree=3)
