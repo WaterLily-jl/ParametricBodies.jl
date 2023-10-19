@@ -7,9 +7,9 @@ include("HashedLocators.jl")
 export HashedLocator, refine, mymod
 
 include("NurbsCurves.jl")
-export NurbsCurve, BSplineCurve
+export NurbsCurve, BSplineCurve, f
 
-import WaterLily: AbstractBody,measure,sdf
+import WaterLily: AbstractBody,measure,sdf,interp
 """
     ParametricBody{T::Real}(surf,locate,map=(x,t)->x,scale=|∇map|⁻¹) <: AbstractBody
 

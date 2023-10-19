@@ -24,7 +24,17 @@ function DynamicBody(surf,locate;T=Float64)
     dsurf = copy(surf); dsurf.pnts .= 0.0 # zero velocity
     DynamicBody(surf,locate,dsurf,T(1.0))
 end
+"""
+    DynamicBody(surf,uv_bounds;step,t⁰,T,mem,map) <: AbstractBody
 
+Creates a `DynamicBody` with `locate=NurbsLocator(surf,uv_bounds...)`.
+"""
+function DynamicBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float64,mem=Array)
+    velocity = copy(surf); velocity.pnts .= 0.0 # zero velocity
+    adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,T,mem),velocity,T(1.0)))
+end
+Adapt.adapt_structure(to, x::DynamicBody{T,F,L,V}) where {T,F,L<:NurbsLocator,V} =
+                      DynamicBody(x.surf,adapt(to,x.locate),x.velocity,x.scale)
 """
     d,n,V = measure(body::DynamicBody,x,t)
 
@@ -54,19 +64,18 @@ function surf_props(body::DynamicBody,ξ,t)
     return (dis(p,n),n,uv)
 end
 
-Adapt.adapt_structure(to, x::DynamicBody{T,F,L,V}) where {T,F,L<:NurbsLocator,V} =
-    DynamicBody(x.surf,adapt(to,x.locate),x.velocity,x.scale)
 """
-    DynamicBody(surf,uv_bounds;step,t⁰,T,mem,map) <: AbstractBody
-
-Creates a `DynamicBody` with `locate=NurbsLocator(surf,uv_bounds...)`.
+    update
 """
-DynamicBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float64,mem=Array) = 
-    adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,T,mem),copy(surf),T(1.0)))
 update!(body::DynamicBody{T,F,L,V},t) where {T,F,L<:NurbsLocator,V} = 
     update!(body.locate,body.surf,t)
-function update!(body::DynamicBody{T,F,L,V},u::AbstractArray,Δt) where {T,F,L<:NurbsLocator,V}
-    body.velocity.pnts .= u./Δt
-    body.surf.pnts .+= u
+function update!(body::DynamicBody{T,F,L,V},uⁿ::AbstractArray,Δt) where {T,F,L<:NurbsLocator,V}
+    body.velocity.pnts .= (uⁿ.-copy(body.surf.pnts))./Δt
+    body.surf.pnts .= uⁿ
+    update!(body.locate,body.surf,0.0)
+end
+function update!(body::DynamicBody{T,F,L,V},uⁿ::AbstractArray,vⁿ::AbstractArray) where {T,F,L<:NurbsLocator,V}
+    body.surf.pnts .= uⁿ
+    body.velocity.pnts .= vⁿ
     update!(body.locate,body.surf,0.0)
 end

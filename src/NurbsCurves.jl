@@ -1,4 +1,5 @@
 using StaticArrays
+using RecipesBase: @recipe, @series
 
 """
     NurbsCurve(pnts,knos,weights)
@@ -69,6 +70,40 @@ Bd(knots, u, k, ::Val{0}) = Int(knots[k]≤u<knots[k+1] || u==knots[k+1]==1)
 function Bd(knots, u, k, ::Val{d}) where d
     ((u-knots[k])/max(eps(Float32),knots[k+d]-knots[k])*Bd(knots,u,k,Val(d-1))
     +(knots[k+d+1]-u)/max(eps(Float32),knots[k+d+1]-knots[k+1])*Bd(knots,u,k+1,Val(d-1)))
+end
+"""
+    NurbsForce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
+
+Compute the normal (Pressure) force on the NurbsCurve curve from a pressure field `p`
+at the parametric coordinate `s`. Useful to compuet the force at an integration point
+along the NurbsCurve
+"""
+function NurbsForce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
+    xᵢ = surf(s,0.0)
+    δnᵢ = δ*ParametricBodies.norm_dir(surf,s,0.0); δnᵢ/=√(δnᵢ'*δnᵢ)
+    Δpₓ = interp(xᵢ+δnᵢ,p)-interp(xᵢ-δnᵢ,p)
+    return -Δpₓ.*δnᵢ
+end
+"""
+    NurbsForce(surf::NurbsCurve,p::AbstractArray{T}) where T
+
+Compute the total force acting on a NurbsCurve from a pressure field `p`.
+"""
+force(surf::NurbsCurve,p::AbstractArray{T}) where {T} = 
+        sum(reduce(hcat, [NurbsForce(surf,p,s) for s=0:0.01:1]), dims=2)
+"""
+    f(C::NurbsCurve, N::Integer=100)
+
+Plot `recipe`` for `NurbsCurve``, plot the `NurbsCurve` and the control points.
+"""
+@recipe function f(C::NurbsCurve, N::Integer=100)
+    seriestype := :path
+    primary := false
+    linecolor := :black
+    linewidth := 2
+    markershape := :none
+    c = [C(s,0.0) for s ∈ 0:1/N:1]
+    getindex.(c,1),getindex.(c,2)
 end
 
 # end module
