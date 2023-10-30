@@ -31,10 +31,11 @@ Base.copy(n::NurbsCurve) = NurbsCurve(copy(n.pnts),copy(n.knots),copy(n.wgts))
 Define a uniform B-spline curve.
 - `pnts`: A 2D array representing the control points of the B-spline curve
 - `degree`: The degree of the B-spline curve
-Note: An open, unifirm knot vector for a degree `degree` B-spline is constructed by default.
+Note: An open, uniform knot vector for a degree `degree` B-spline is constructed by default.
 """
-function BSplineCurve(pnts;degree=3)
+function BSplineCurve(pnts;degree=1)
     count,T = size(pnts, 2),promote_type(eltype(pnts),Float32)
+    @assert degree <= count - 1 "Invalid B-Spline: the degree should be less than the number of control points minus 1."
     knots = SA{T}[[zeros(degree); collect(range(0, count-degree) / (count-degree)); ones(degree)]...]
     weights = SA{T}[ones(count)...]
     NurbsCurve{degree,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights)
