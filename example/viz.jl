@@ -1,4 +1,7 @@
 using GLMakie
+plot_vorticity(ω; limit=maximum(abs,ω)) =contourf(clamp.(ω,-limit,limit)',dpi=300,
+    color=palette(:RdBu_11), clims=(-limit, limit), linewidth=0,
+    aspect_ratio=:equal, legend=false, border=:none)
 function get_omega!(vort,sim)
     @inside sim.flow.σ[I] = WaterLily.curl(3,I,sim.flow.u) * sim.L / sim.U
     copyto!(vort,sim.flow.σ[inside(sim.flow.σ)])

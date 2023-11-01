@@ -21,7 +21,7 @@ function NurbsCurve(pnts,knots,weights;degree=3)
     @assert count < length(knots) "Invalid NURBS: the number of knots should be greater than the number of control points."
     degree = length(knots) - count - 1 # the one in the input is not used
     knots = SA{T}[knots...]; weights = SA{T}[weights...]
-    NurbsCurve{degree,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights)
+    NurbsCurve{degree,typeof(pnts),typeof(knots),typeof(weights)}(copy(pnts),knots,weights)
 end
 Base.copy(n::NurbsCurve) = NurbsCurve(copy(n.pnts),copy(n.knots),copy(n.wgts))
 
@@ -38,7 +38,7 @@ function BSplineCurve(pnts;degree=1)
     @assert degree <= count - 1 "Invalid B-Spline: the degree should be less than the number of control points minus 1."
     knots = SA{T}[[zeros(degree); collect(range(0, count-degree) / (count-degree)); ones(degree)]...]
     weights = SA{T}[ones(count)...]
-    NurbsCurve{degree,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights)
+    NurbsCurve{degree,typeof(pnts),typeof(knots),typeof(weights)}(copy(pnts),knots,weights)
 end
 
 """
@@ -97,14 +97,23 @@ force(surf::NurbsCurve,p::AbstractArray{T}) where {T} =
 
 Plot `recipe`` for `NurbsCurve``, plot the `NurbsCurve` and the control points.
 """
-@recipe function f(C::NurbsCurve, N::Integer=100)
+@recipe function f(C::NurbsCurve, N::Integer=100; add_cp=true)
     seriestype := :path
     primary := false
-    linecolor := :black
-    linewidth := 2
-    markershape := :none
-    c = [C(s,0.0) for s ∈ 0:1/N:1]
-    getindex.(c,1),getindex.(c,2)
+    @series begin
+        linecolor := :black
+        linewidth := 2
+        markershape := :none
+        c = [C(s,0.0).+0.5 for s ∈ 0:1/N:1]
+        getindex.(c,1),getindex.(c,2)
+    end
+    @series begin
+        linewidth  --> (add_cp ? 1 : 0)
+        markershape --> (add_cp ? :circle : :none)
+        markersize --> (add_cp ? 4 : 0)
+        delete!(plotattributes, :add_cp)
+        C.pnts[1,:].+0.5,C.pnts[2,:].+0.5
+    end
 end
 
 # end module
