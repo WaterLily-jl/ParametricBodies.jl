@@ -1,4 +1,7 @@
 using StaticArrays
+using ForwardDiff: derivative
+using FastGaussQuadrature: gausslegendre
+using LinearAlgebra: norm
 using RecipesBase: @recipe, @series
 
 """
@@ -92,6 +95,18 @@ Compute the total force acting on a NurbsCurve from a pressure field `p`.
 """
 force(surf::NurbsCurve,p::AbstractArray{T}) where {T} = 
         sum(reduce(hcat, [NurbsForce(surf,p,s) for s=0:0.01:1]), dims=2)
+"""
+    integrate(curve;N=64)
+
+integrate the nurbs curve to give it's length
+"""
+function integrate(curve::NurbsCurve;N=64)
+    # integrate NURBS curve to compute its length
+    x, w = gausslegendre(N)
+    # map onto the (0,1) interval, need a weight scalling
+    uv_ = (x.+1)/2; w/=2 
+    sum([norm(derivative(uv->curve(uv,0.),uv))*w[i] for (i,uv) in enumerate(uv_)])
+end
 """
     f(C::NurbsCurve, N::Integer=100)
 
