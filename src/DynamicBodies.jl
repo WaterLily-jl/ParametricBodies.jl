@@ -22,7 +22,7 @@ function DynamicBody(surf,locate;dist=dis,T=Float64)
     @CUDA.allowscalar uv = locate(x,t); p = x-surf(uv,t)
     @assert isa(uv,T) "locate is not type stable"
     @assert isa(p,SVector{2,T}) "surf is not type stable"
-    @assert isa(dist(x,x),T) "dist is no type stable"
+    @assert isa(dist(x,x),T) "dist is not type stable"
     dsurf = copy(surf); dsurf.pnts .= 0.0 # zero velocity
     DynamicBody(surf,locate,dsurf,T(1.0),dist)
 end
