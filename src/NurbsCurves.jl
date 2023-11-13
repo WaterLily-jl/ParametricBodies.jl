@@ -18,7 +18,7 @@ struct NurbsCurve{d,A<:AbstractArray,V<:AbstractVector,W<:AbstractVector} <: Fun
     knots::V
     wgts::W
 end
-function NurbsCurve(pnts,knots,weights;degree=3)
+function NurbsCurve(pnts,knots,weights)
     count,T = size(pnts, 2),promote_type(eltype(pnts),Float32)
     @assert count == length(weights) "Invalid NURBS: each control point should have a corresponding weights."
     @assert count < length(knots) "Invalid NURBS: the number of knots should be greater than the number of control points."
@@ -79,7 +79,7 @@ end
     NurbsForce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
 
 Compute the normal (Pressure) force on the NurbsCurve curve from a pressure field `p`
-at the parametric coordinate `s`. Useful to compuet the force at an integration point
+at the parametric coordinate `s`. Useful to compute the force at an integration point
 along the NurbsCurve
 """
 function NurbsForce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
@@ -131,5 +131,3 @@ Plot `recipe`` for `NurbsCurve``, plot the `NurbsCurve` and the control points.
         C.pnts[1,:].+0.5,C.pnts[2,:].+0.5
     end
 end
-
-# end module
