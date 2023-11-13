@@ -53,3 +53,12 @@ Updating the control point is can be simply done by passing the new control poin
 ```julia
 update!(DynamicBody, new_cps, Δt)
 ```
+
+##### Overloading signed distance function
+
+By default, `DynamicBody` uses a signed distance function to the parametric curve. This might not be the desired behaviour and can be overloaded by defining a new `dist` function. For example, to overload the signed distance function a spline with a thickness of `thk` one can do
+```julia
+new_dist(p,n) = √(p'*p) - thk/2
+DynamicBody(spline,(0,1);dist=new_dist)
+```
+This is demonstrated in [examples/TwoD_nurbs.jl](./example/TwoD_nurbs.jl).

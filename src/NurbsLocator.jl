@@ -56,14 +56,14 @@ Updates `l.hash` for `surf` at time `t` by searching through `samples` and refin
 update!(l::NurbsLocator,surf,t,samples=l.lims)=(_update!(get_backend(l.hash),64)(l,surf,samples,t,ndrange=size(l.hash));l)
 @kernel function _update!(l::NurbsLocator{T},surf,@Const(samples),@Const(t)) where T
     # update bounding box
-    lower = upper = surf(first(samples),t)
+    l.lower .= l.upper .= surf(first(samples),t)
     for uv in samples
         x = surf(uv,t)
-        lower = min.(lower,x)
-        upper = max.(upper,x)
+        l.lower .= min.(l.lower,x)
+        l.upper .= max.(l.upper,x)
     end
-    l.lower .= lower.-2*l.step
-    l.upper .= upper.+2*l.step
+    l.lower .= l.lower.-2*l.step
+    l.upper .= l.upper.+2*l.step
 end
 
 """

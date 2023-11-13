@@ -9,32 +9,33 @@ Explicitly defines a geometries by an unsteady parametric curve. The curve is cu
 to be 2D, and must wind counter-clockwise. Any distance scaling induced by the map needs to be 
 uniform and `scale` is computed automatically unless supplied.
 """
-struct DynamicBody{T,S<:Function,L<:Union{Function,NurbsLocator},V<:Function} <: AbstractParametricBody
+struct DynamicBody{T,S<:Function,L<:Union{Function,NurbsLocator},V<:Function,D<:Function} <: AbstractParametricBody
     surf::S    #ξ = surf(uv,t)
     locate::L  #uv = locate(ξ,t)
     velocity::V # v = velocity(uv), defaults to v=0
     scale::T   #|dx/dξ| = scale
+    dist::D
 end
-function DynamicBody(surf,locate;T=Float64)
+function DynamicBody(surf,locate;dist=dis,T=Float64)
     # Check input functions
     x,t = SVector{2,T}(0,0),T(0);
     @CUDA.allowscalar uv = locate(x,t); p = x-surf(uv,t)
     @assert isa(uv,T) "locate is not type stable"
     @assert isa(p,SVector{2,T}) "surf is not type stable"
+    @assert isa(dist(x,x),T) "dist is no type stable"
     dsurf = copy(surf); dsurf.pnts .= 0.0 # zero velocity
-    DynamicBody(surf,locate,dsurf,T(1.0))
+    DynamicBody(surf,locate,dsurf,T(1.0),dist)
 end
 """
     DynamicBody(surf,uv_bounds;step,t⁰,T,mem,map) <: AbstractBody
 
 Creates a `DynamicBody` with `locate=NurbsLocator(surf,uv_bounds...)`.
 """
-function DynamicBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float64,mem=Array)
-    velocity = copy(surf); velocity.pnts .= 0.0 # zero velocity
-    adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,T,mem),velocity,T(1.0)))
-end
-Adapt.adapt_structure(to, x::DynamicBody{T,F,L,V}) where {T,F,L<:NurbsLocator,V} =
-                      DynamicBody(x.surf,adapt(to,x.locate),x.velocity,x.scale)
+DynamicBody(surf,uv_bounds::Tuple;dist=dis,step=1,t⁰=0.,T=Float64,mem=Array) =
+    adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,T,mem);dist,T))
+
+Adapt.adapt_structure(to, x::DynamicBody{T,F,L,V,D}) where {T,F,L<:NurbsLocator,V,D} =
+                      DynamicBody(x.surf,adapt(to,x.locate),x.velocity,x.scale,x.dist)
 """
     d,n,V = measure(body::DynamicBody,x,t)
 
@@ -61,7 +62,7 @@ function surf_props(body::DynamicBody,ξ,t)
     # Fix direction for C⁰ points, normalize, and get distance
     notC¹(body.locate,uv) && p'*p>0 && (n = p)
     n /=  √(n'*n)
-    return (dis(p,n),n,uv)
+    return (body.dist(p,n),n,uv)
 end
 
 """

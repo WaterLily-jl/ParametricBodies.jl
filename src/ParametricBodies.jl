@@ -121,6 +121,6 @@ include("NurbsLocator.jl")
 export NurbsLocator
 
 include("DynamicBodies.jl")
-export DynamicBody,measure,sdf
+export DynamicBody,measure
 
 end

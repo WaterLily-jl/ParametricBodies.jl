@@ -10,9 +10,6 @@ U =1
 ϵ=0.5
 thk=2ϵ+√2
 
-# overload the distance function
-ParametricBodies.dis(p,n) = √(p'*p) - thk/2
-
 # define a flat plat at and angle of attack
 cps = SA[-1   0   1
          0.5 0.25 0]*L .+ [2L,3L]
@@ -26,8 +23,9 @@ cps_m = MMatrix(cps)
 # circle = NurbsCurve(cps_m,knots,weights)
 circle = BSplineCurve(cps_m;degree=2)
 
-# make a body and a simulation
-Body = DynamicBody(circle,(0,1))
+# make a body and a simulation, overloead distance function
+dist(p,n)=√(p'*p)-thk/2
+Body = DynamicBody(circle,(0,1),dist=dist)
 sim = Simulation((8L,6L),(U,0),L;U,ν=U*L/Re,body=Body,T=Float64)
 
 # intialize
