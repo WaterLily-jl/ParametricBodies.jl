@@ -15,6 +15,7 @@ struct DynamicBody{T,S<:Function,L<:Union{Function,NurbsLocator},V<:Function,D<:
     velocity::V # v = velocity(uv), defaults to v=0
     scale::T   #|dx/dξ| = scale
     dist::D
+    store::SVector{2,<:AbstractArray}
 end
 function DynamicBody(surf,locate;dist=dis,T=Float64)
     # Check input functions
@@ -24,7 +25,8 @@ function DynamicBody(surf,locate;dist=dis,T=Float64)
     @assert isa(p,SVector{2,T}) "surf is not type stable"
     @assert isa(dist(x,x),T) "dist is no type stable"
     dsurf = copy(surf); dsurf.pnts .= 0.0 # zero velocity
-    DynamicBody(surf,locate,dsurf,T(1.0),dist)
+    store = SVector{2,typeof(surf.pnts)}(copy(surf.pnts),copy(dsurf.pnts))
+    DynamicBody(surf,locate,dsurf,T(1.0),dist,store)
 end
 """
     DynamicBody(surf,uv_bounds;step,t⁰,T,mem,map) <: AbstractBody
@@ -35,7 +37,7 @@ DynamicBody(surf,uv_bounds::Tuple;dist=dis,step=1,t⁰=0.,T=Float64,mem=Array) =
     adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,T,mem);dist,T))
 
 Adapt.adapt_structure(to, x::DynamicBody{T,F,L,V,D}) where {T,F,L<:NurbsLocator,V,D} =
-                      DynamicBody(x.surf,adapt(to,x.locate),x.velocity,x.scale,x.dist)
+                      DynamicBody(x.surf,adapt(to,x.locate),x.velocity,x.scale,x.dist,x.store)
 """
     d,n,V = measure(body::DynamicBody,x,t)
 
@@ -79,4 +81,13 @@ function update!(body::DynamicBody{T,F,L,V},uⁿ::AbstractArray,vⁿ::AbstractAr
     body.surf.pnts .= uⁿ
     body.velocity.pnts .= vⁿ
     update!(body.locate,body.surf,0.0)
+end
+# store and revert methods for FSI
+function store!(body::DynamicBody)
+    body.store[1] .= body.surf.pnts
+    body.store[2] .= body.velocity.pnts
+end
+function revert!(body::DynamicBody)
+    body.surf.pnts .= body.store[1]
+    body.velocity.pnts .= body.store[2]
 end
