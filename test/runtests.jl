@@ -117,3 +117,36 @@ using LinearAlgebra,ForwardDiff,CUDA
         @CUDA.allowscalar @test all(measure(body,SA_F32[-6,0],0) .≈ [1,[-1,0],[0,0]])
     end
 end
+@testset "DynamicBody.jl" begin
+    # define a curve
+    cps = SA[-1 0 1
+              0 0 0]
+    cps_m = MMatrix(cps)
+    weights = SA[1.,1.,1.]
+    knots =   SA[0,0,0,1,1,1.]
+
+    # make a nurbs curve
+    nurbs = NurbsCurve(cps_m,knots,weights)
+    Body = DynamicBody(nurbs,(0,1))
+
+    # check some distance
+    @test all(measure(Body,[1,1],0) .≈ [1,[0.,1.],[0.,0.]])
+    # update, should now have a velocity
+    ParametricBodies.update!(Body,cps.-[0,1],1.0)
+    @test all(measure(Body,[1,1],0) .≈ [2,[0.,1.],[0.,-1]])
+    
+    # same for B-Splines, define a curve
+    cps = SA[-1 0 1
+              0 0 0]
+    cps_m = MMatrix(cps)
+
+    # make a nurbs curve
+    bspline = BSplineCurve(cps_m;degree=2)
+    Body = DynamicBody(bspline,(0,1))
+
+    # check some distance
+    @test all(measure(Body,[1,1],0) .≈ [1,[0.,1.],[0.,0.]])
+    # update, should now have a velocity
+    ParametricBodies.update!(Body,cps.-[0,1],1.0)
+    @test all(measure(Body,[1,1],0) .≈ [2,[0.,1.],[0.,-1]])
+end

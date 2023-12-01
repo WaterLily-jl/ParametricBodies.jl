@@ -4,12 +4,12 @@ using StaticArrays,ForwardDiff
 using CUDA,Adapt,KernelAbstractions
 
 include("HashedLocators.jl")
-export HashedLocator
+export HashedLocator, refine, mymod
 
 include("NurbsCurves.jl")
-export NurbsCurve, BSplineCurve
+export NurbsCurve, BSplineCurve, integrate, force, NurbsForce
 
-import WaterLily: AbstractBody,measure,sdf
+import WaterLily: AbstractBody,measure,sdf,interp
 """
     ParametricBody{T::Real}(surf,locate,map=(x,t)->x,scale=|∇map|⁻¹) <: AbstractBody
 
@@ -35,7 +35,8 @@ Example:
     @test n ≈ SA[-3/5, 4/5]
     @test V ≈ SA[-4/5,-3/5]
 """
-struct ParametricBody{T,S<:Function,L<:Union{Function,HashedLocator},M<:Function} <: AbstractBody
+abstract type AbstractParametricBody <: AbstractBody end
+struct ParametricBody{T,S<:Function,L<:Union{Function,HashedLocator},M<:Function} <: AbstractParametricBody
     surf::S    #ξ = surf(uv,t)
     locate::L  #uv = locate(ξ,t)
     map::M     #ξ = map(x,t)
@@ -71,12 +72,12 @@ function measure(body::ParametricBody,x,t)
     return (d,dξdx\n/body.scale,dξdx\dξdt)
 end
 """
-    d = sdf(body::ParametricBody,x,t)
+    d = sdf(body::AbstractParametricBody,x,t)
 
 Signed distance from `x` to closest point on `body.surf` at time `t`. Sign depends on the
 winding direction of the parametric curve.
 """
-sdf(body::ParametricBody,x,t) = surf_props(body,x,t)[1]
+sdf(body::AbstractParametricBody,x,t) = surf_props(body,x,t)[1]
 
 function surf_props(body::ParametricBody,x,t)
     # Map x to ξ and locate nearest uv
@@ -114,6 +115,12 @@ ParametricBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float64,mem=Array,map=(x,t
 update!(body::ParametricBody{T,F,L},t) where {T,F,L<:HashedLocator} = 
     update!(body.locate,body.surf,t)
 
-export ParametricBody,measure,sdf
+export AbstractParametricBody,ParametricBody,measure,sdf
+
+include("NurbsLocator.jl")
+export NurbsLocator
+
+include("DynamicBodies.jl")
+export DynamicBody,measure
 
 end
