@@ -116,4 +116,53 @@ using LinearAlgebra,ForwardDiff,CUDA
         body = ParametricBody(circle, (0,1), T=Float32, mem=CuArray);
         @CUDA.allowscalar @test all(measure(body,SA_F32[-6,0],0) .≈ [1,[-1,0],[0,0]])
     end
+
+    # test interpolation base on the NURBS-book p.367 Ex9.1
+    pnts = SA[0. 3. -1. -4  -4.
+              0. 4.  4.  0. -3.]
+    nurbs,s = interpNurbs(pnts;p=3),ParametricBodies._u(pnts)
+    @test all(s.≈[0.,5/17,9/17,14/17,1.])
+    @test all(nurbs.knots.≈[0.,0.,0.,0.,28/51,1.,1.,1.,1.])
+    @test all(reduce(hcat,nurbs.(s,0.0)).-pnts.<10eps(eltype(pnts)))
+end
+@testset "DynamicBody.jl" begin
+    # define a curve
+    cps = SA[-1 0 1
+              0 0 0]
+    cps_m = MMatrix(cps)
+    weights = SA[1.,1.,1.]
+    knots =   SA[0,0,0,1,1,1.]
+
+    # make a nurbs curve
+    nurbs = NurbsCurve(cps_m,knots,weights)
+    Body = DynamicBody(nurbs,(0,1);dist=(p,n)->√(p'*p))
+
+    #Test on CUDA
+    if(CUDA.functional())
+        Body = DynamicBody(nurbs,(0,1), T=Float32, mem=CuArray);
+        # @CUDA.allowscalar @test all(measure(Body,SA_F32[1,1],0) .≈ [1,[0.,1.],[0.,0.]])
+    end
+
+    # check some distance
+    @test all(measure(Body,[1,1],0) .≈ [1,[0.,1.],[0.,0.]])
+    # update, should now have a velocity
+    ParametricBodies.update!(Body,cps.-[0,1],1.0)
+    # carefull not to be outside bounding box.
+    @test all(measure(Body,[1,0.85],0) .≈ [1.85,[0.,1.],[0.,-1]])
+    
+    # same for B-Splines, define a curve
+    cps = SA[-1 0 1
+              0 0 0]
+    cps_m = MMatrix(cps)
+
+    # make a nurbs curve
+    bspline = BSplineCurve(cps_m;degree=2)
+    Body = DynamicBody(bspline,(0,1);dist=(p,n)->√(p'*p))
+
+    # check some distance
+    @test all(measure(Body,[1,1],0) .≈ [1,[0.,1.],[0.,0.]])
+    # update, should now have a velocity
+    ParametricBodies.update!(Body,cps.-[0,1],1.0)
+    # carefull not to be outside bounding box.
+    @test all(measure(Body,[1,0.85],0) .≈ [1.85,[0.,1.],[0.,-1]])
 end
