@@ -91,31 +91,3 @@ function update!(body::DynamicBody{T,F,L,V},uⁿ::AbstractArray,vⁿ::AbstractAr
     body.velocity.pnts .= vⁿ
     update!(body.locate,body.surf,0.0)
 end
-# using WaterLily: Flow
-# force(body::DynamicBody,flow;N=64) = integrate(s->Forces(body,flow,s),body.surf;N)
-# function Forces(body::DynamicBody{T},flow::Flow{N,T},s,δ=2.0) where {N,T}
-#     xᵢ = body.surf(s,0.0)
-#     δnᵢ = δ*ParametricBodies.norm_dir(body.surf,s,0.0); δnᵢ/=√(δnᵢ'*δnᵢ)
-#     Δpₓ = interp(xᵢ+δnᵢ,flow.p)-interp(xᵢ-δnᵢ,flow.p)
-#     vᵢ = body.velocity(s,0.0)
-#     τ = SVector{N,T}(zeros(N))
-#     for j ∈ [-1,1]
-#         uᵢ = interp(xᵢ+j*δnᵢ,flow.u)
-#         uᵢ = uᵢ .- sum(uᵢ.*δnᵢ)*δnᵢ
-#         τ = τ + 2.0.*(uᵢ.-vᵢ)./(2δ)
-#     end
-#     return -Δpₓ.*δnᵢ #+ flow.ν.*τ
-# end
-# vforce(body::DynamicBody,flow;N=64) = integrate(s->VForces(body,flow,s),body.surf;N)
-# function VForces(body::DynamicBody{T},flow::Flow{N,T},s,δ=2.0) where {N,T}
-#     xᵢ = body.surf(s,0.0)
-#     δnᵢ = δ*ParametricBodies.norm_dir(body.surf,s,0.0); δnᵢ/=√(δnᵢ'*δnᵢ)
-#     vᵢ = body.velocity(s,0.0); τ = SVector{N,T}(zeros(N))
-#     vᵢ = vᵢ .- sum(vᵢ.*δnᵢ)*δnᵢ
-#     for j ∈ [-1,1]
-#         uᵢ = interp(xᵢ+j*δnᵢ,flow.u)
-#         uᵢ = uᵢ .- sum(uᵢ.*δnᵢ)*δnᵢ
-#         τ = τ + (uᵢ.-vᵢ)./δ
-#     end
-#     return flow.ν.*τ
-# end

@@ -48,15 +48,6 @@ end
 # if it's open, we need to check that we are not at the endpoints
 notC¹(l::NurbsLocator,uv) = !(l.surf(first(l.lims),0)≈l.surf(last(l.lims),0)) && any(uv.≈l.lims)
 
-# @generated function notC¹(l::NurbsLocator,uv)
-#     lims = :(getproperty($:(l),:lims))
-#     C = :(getproperty($:(l),:surf))
-#     return C
-#     # ex = :($C(first($lims),0)≈$C(last($lims),0))
-#     # ex = Expr(:call,:any,:($lims.≈uv))
-#     # ex = :(false)
-#     # return ex
-# end
 """
     update!(l::NurbsLocator,surf,t,samples=l.lims)
 
