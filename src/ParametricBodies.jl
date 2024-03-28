@@ -136,7 +136,7 @@ end
 
 Surface normal pressure integral along the parametric curve(s)
 """
-function ∮nds(p::AbstractArray{T},body::AbstractParametricBody,t::T;N=64) where T
+function ∮nds(p::AbstractArray{T},body::AbstractParametricBody,t=0;N=64) where T
     integrate(s->_pforce(body.surf,p,s,t),body.surf,t,body.locate.lims;N)
 end
 """
@@ -144,18 +144,18 @@ end
 
 Surface normal pressure integral along the parametric curve(s)
 """
-function ∮τnds(u::AbstractArray{T},body::ParametricBody,t::T;N=64) where T
+function ∮τnds(u::AbstractArray{T},body::ParametricBody,t=0;N=64) where T
     v(uv) = body.map(body.surf(uv,t),t) # get velocity at coordinate uv
     integrate(s->_vforce(body.surf,u,s,t,v(s)),body.surf,t,body.locate.lims;N)
 end
 
 # pressure force on a parametric `surf` at parametric coordinate `s` and time `t`.
-function _pforce(surf::Function,p::AbstractArray{T},s::T,t::T,δ=2.0) where T
+function _pforce(surf::Function,p::AbstractArray{T},s::T,t,δ::T=2) where T
     xᵢ = surf(s,t); nᵢ = norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
     return -interp(xᵢ+δ*nᵢ,p).*nᵢ
 end
 # viscous force on a parametric `surf` at parametric coordinate `s` and time `t`.
-function _vforce(surf::Function,p::AbstractArray{T},s::T,t::T,vᵢ,δ=2.0) where T
+function _vforce(surf::Function,p::AbstractArray{T},s::T,t,vᵢ,δ::T=2) where T
     xᵢ = surf(s,t); nᵢ = norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
     vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ # tangential comp
     uᵢ = interp(xᵢ+δ*nᵢ,u)  # prop in the field

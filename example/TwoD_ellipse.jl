@@ -1,6 +1,6 @@
 using WaterLily,StaticArrays
 using ParametricBodies # New package
-function make_sim(;L=32,Re=1e3,St=0.3,U=1,n=8,m=4,Λ=5,T=Float32,mem=Array)
+function make_sim(;L=32,Re=1e3,St=0.3,U=1,n=8,m=4,Λ=5,T=Float64,mem=Array)
     # Map from simulation coordinate x to surface coordinate ξ
     b = T(1/Λ); h₀=T(L÷4); ω=T(π*St*U/h₀)
     ellipse(θ,t) = 0.5f0L*SA[1+cos(θ),b*sin(θ)] # define parametric curve
@@ -26,6 +26,8 @@ anim = @animate for tᵢ in range(t₀,t₀+duration;step=tstep)
     # flood plot
     get_omega!(sim);
     plot_vorticity(sim.flow.σ, limit=10)
+    p = ParametricBodies.∮nds(sim.flow.p,sim.body)
+    @show p
 
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
