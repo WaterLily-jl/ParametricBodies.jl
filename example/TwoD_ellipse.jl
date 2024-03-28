@@ -10,14 +10,25 @@ function make_sim(;L=32,Re=1e3,St=0.3,U=1,n=8,m=4,Λ=5,T=Float32,mem=Array)
     Simulation((n*L,m*L),(U,0),L;ν=U*L/Re,body,T,mem)
 end
 # using CUDA
-include("viz.jl");Makie.inline!(false);
+include("viz.jl");
 
-function make_video(L=32,St=0.3,name="parametric_ellipse.mp4")
-    cycle = range(0,2/St,240)
-    sim = make_sim(;L,St,mem=Array)
-    fig,viz = body_omega_fig(sim)
-    Makie.record(fig,name,2cycle) do t
-        sim_step!(sim,t,verbose=true)
-        update!(viz,sim)
-    end
+# set -up simulations time and time-step for ploting
+sim = make_sim()
+t₀ = round(sim_time(sim))
+duration = 1; tstep = 0.1
+
+# run
+anim = @animate for tᵢ in range(t₀,t₀+duration;step=tstep)
+
+    # update until time tᵢ in the background
+    sim_step!(sim,tᵢ,remeasure=true)
+
+    # flood plot
+    get_omega!(sim);
+    plot_vorticity(sim.flow.σ, limit=10)
+
+    # print time step
+    println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
 end
+# save gif
+gif(anim, "/tmp/jl_sfawfg.gif", fps=24)

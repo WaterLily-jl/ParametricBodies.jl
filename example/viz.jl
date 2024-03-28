@@ -1,15 +1,19 @@
-using GLMakie
-plot_vorticity(ω; limit=maximum(abs,ω)) =contourf(clamp.(ω,-limit,limit)',dpi=300,
-    color=palette(:RdBu_11), clims=(-limit, limit), linewidth=0,
-    aspect_ratio=:equal, legend=false, border=:none)
-function get_omega!(vort,sim)
-    @inside sim.flow.σ[I] = WaterLily.curl(3,I,sim.flow.u) * sim.L / sim.U
-    copyto!(vort,sim.flow.σ[inside(sim.flow.σ)])
+using Plots
+
+function get_omega!(sim)
+    body(I) = sum(WaterLily.ϕ(i,CartesianIndex(I,i),sim.flow.μ₀) for i ∈ 1:2)/2
+    @inside sim.flow.σ[I] = WaterLily.curl(3,I,sim.flow.u) * body(I) * sim.L / sim.U
 end
+
+plot_vorticity(ω; limit=maximum(abs,ω)) = Plots.contourf(clamp.(ω|>Array,-limit,limit)',dpi=300,
+               color=palette(:RdBu_11), clims=(-limit, limit), linewidth=0,
+               aspect_ratio=:equal, legend=false, border=:none)
+
 function get_body!(bod,sim,t=WaterLily.time(sim))
     @inside sim.flow.σ[I] = WaterLily.sdf(sim.body,SVector(Tuple(I).-0.5f0),t)
     copyto!(bod,sim.flow.σ[inside(sim.flow.σ)])
 end
+using GLMakie
 function body_omega_fig(sim,resolution=(1400,700))
     #Set up figure
     fig = Figure(;resolution)

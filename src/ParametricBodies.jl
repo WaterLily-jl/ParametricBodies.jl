@@ -115,6 +115,64 @@ ParametricBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float64,mem=Array,map=(x,t
 update!(body::ParametricBody{T,F,L},t) where {T,F,L<:HashedLocator} = 
     update!(body.locate,body.surf,t)
 
+"""
+    integrate(f(uv),curve;N=64)
+
+integrate a function f(uv) along the curve
+"""
+function _gausslegendre(N,T) 
+    x,w = gausslegendre(N)
+    convert.(T,x),convert.(T,w)
+end
+function integrate(f::Function,curve::Function,t::T,lims;N=64) where T
+    # integrate NURBS curve to compute its length
+    uv_, w_ = _gausslegendre(N,T)
+    # map onto the (uv) interval, need a weight scalling
+    scale=lims[2]-lims[1]; uv_=scale*(uv_.+1)/2; w_=scale*w_/2 
+    sum([f(uv)*norm(derivative(uv->curve(uv,t),uv))*w for (uv,w) in zip(uv_,w_)])
+end
+"""
+    ∮nds(p,body::AbstractParametricBody,t=0)
+
+Surface normal pressure integral along the parametric curve(s)
+"""
+function ∮nds(p::AbstractArray{T},body::AbstractParametricBody,t::T;N=64) where T
+    integrate(s->_pforce(body.surf,p,s,t),body.surf,t,body.locate.lims;N)
+end
+"""
+    ∮τnds(u,body::AbstractParametricBody,t=0)
+
+Surface normal pressure integral along the parametric curve(s)
+"""
+function ∮τnds(u::AbstractArray{T},body::ParametricBody,t::T;N=64) where T
+    v(uv) = body.map(body.surf(uv,t),t) # get velocity at coordinate uv
+    integrate(s->_vforce(body.surf,u,s,t,v(s)),body.surf,t,body.locate.lims;N)
+end
+
+# pressure force on a parametric `surf` at parametric coordinate `s` and time `t`.
+function _pforce(surf::Function,p::AbstractArray{T},s::T,t::T,δ=2.0) where T
+    xᵢ = surf(s,t); nᵢ = norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
+    return -interp(xᵢ+δ*nᵢ,p).*nᵢ
+end
+# viscous force on a parametric `surf` at parametric coordinate `s` and time `t`.
+function _vforce(surf::Function,p::AbstractArray{T},s::T,t::T,vᵢ,δ=2.0) where T
+    xᵢ = surf(s,t); nᵢ = norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
+    vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ # tangential comp
+    uᵢ = interp(xᵢ+δ*nᵢ,u)  # prop in the field
+    uᵢ = uᵢ .- sum(uᵢ.*nᵢ)*nᵢ # tangential comp
+    return (uᵢ.-vᵢ)./δ # FD
+end
+
+
+# function integration_points(body::AbstractParametricBody,t=0;N=64)
+#     pnts = []
+#     for s in range(body.locate.lims...,N)
+#         xᵢ = body.surf(s,t); nᵢ = ParametricBodies.norm_dir(body.surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
+#         push!(pnts,xᵢ+nᵢ)
+#     end
+#     reduce(hcat,pnts)
+# end
+
 export AbstractParametricBody,ParametricBody,measure,sdf
 
 include("NurbsLocator.jl")

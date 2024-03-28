@@ -94,47 +94,31 @@ Compute the normal (Pressure) force on the NurbsCurve curve from a pressure fiel
 at the parametric coordinate `s`. Useful to compute the force at an integration point
 along the NurbsCurve
 """
-NurbsForce(surf,p,s,δ=2.0) = PForce(surf,p,s,δ) # Backward compatibility
-function PForce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
-    xᵢ = surf(s,0.0)
-    δnᵢ = δ*ParametricBodies.norm_dir(surf,s,0.0); δnᵢ/=√(δnᵢ'*δnᵢ)
-    Δpₓ = interp(xᵢ+δnᵢ,p)-interp(xᵢ-δnᵢ,p)
-    return -Δpₓ.*δnᵢ
+NurbsForce(surf,p,s,δ=1.0) = _pforce(surf,p,s,δ) # Backward compatibility
+function _pforce(surf::NurbsCurve,p::AbstractArray{T},s,t,δ=1.0) where T
+    xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
+    return -(interp(xᵢ+δ*nᵢ,p)-interp(xᵢ-δ*nᵢ,p))*nᵢ
 end
-function VForce(surf::NurbsCurve,u::AbstractArray{T},s,δ=2.0) where T
-    xᵢ = surf(s,0.0)
-    δnᵢ = δ*ParametricBodies.norm_dir(surf,s,0.0); δnᵢ/=√(δnᵢ'*δnᵢ)
-    vᵢ = velocity(surf,s,0.0); τ = SVector{length(vᵢ),T}(zero(vᵢ))
-    vᵢ = vᵢ .- sum(vᵢ.*δnᵢ)*δnᵢ
+function _vforce(surf::NurbsCurve,u::AbstractArray{T},s,t,v,δ=1.0) where T
+    xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
+    vᵢ = velocity(surf,s,t); τ = SVector{length(vᵢ),T}(zero(vᵢ))
+    vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ
     for j ∈ [-1,1]
-        uᵢ = interp(xᵢ+j*δnᵢ,u)
-        uᵢ = uᵢ .- sum(uᵢ.*δnᵢ)*δnᵢ
+        uᵢ = interp(xᵢ+j*δ*nᵢ,u)
+        uᵢ = uᵢ .- sum(uᵢ.*nᵢ)*nᵢ
         τ = τ + (uᵢ.-vᵢ)./δ
     end
     return τ
 end
-"""
-    PForce(surf::NurbsCurve,p::AbstractArray{T}) where T
+# """
+#     PForce(surf::NurbsCurve,p::AbstractArray{T}) where T
 
-Compute the total force acting on a NurbsCurve from a pressure field `p`.
-"""
-pforce(surf::NurbsCurve,p::AbstractArray{T};N=64) where T = 
-                       integrate(s->PForce(surf,p,s),surf;N)
-vforce(surf::NurbsCurve,u::AbstractArray{T};N=64) where T = 
-                       integrate(s->VForce(surf,u,s),surf;N)
-"""
-    integrate(f(uv),curve;N=64)
-
-integrate a function f(uv) along the curve::NurbsCurve, default is the length of the curve
-"""
-integrate(curve::NurbsCurve;N=64) = integrate((ξ)->1.0,curve::NurbsCurve;N=64)
-function integrate(f::Function,curve::NurbsCurve;N=64)
-    # integrate NURBS curve to compute its length
-    uv_, w_ = gausslegendre(N)
-    # map onto the (0,1) interval, need a weight scalling
-    uv_ = (uv_.+1)/2; w_/=2 
-    sum([f(uv)*norm(derivative(uv->curve(uv,0.),uv))*w for (uv,w) in zip(uv_,w_)])
-end
+# Compute the total force acting on a NurbsCurve from a pressure field `p`.
+# """
+# pforce(surf::NurbsCurve,p::AbstractArray{T};N=64) where T = 
+#                        integrate(s->PForce(surf,p,s),surf;N)
+# vforce(surf::NurbsCurve,u::AbstractArray{T};N=64) where T = 
+#                        integrate(s->VForce(surf,u,s),surf;N)
 """
     interpNurbs(pnts{D,n};p=n-1)
 
