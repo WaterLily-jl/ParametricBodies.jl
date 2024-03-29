@@ -26,8 +26,10 @@ anim = @animate for tᵢ in range(t₀,t₀+duration;step=tstep)
     # flood plot
     get_omega!(sim);
     plot_vorticity(sim.flow.σ, limit=10)
-    p = ParametricBodies.∮nds(sim.flow.p,sim.body)
-    @show p
+    plot!(sim.body)
+    p = ParametricBodies.∮nds(sim.flow.p,sim.body,tᵢ)
+    ν = ParametricBodies.∮τnds(sim.flow.u,sim.body,tᵢ)
+    @show p,ν
 
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))

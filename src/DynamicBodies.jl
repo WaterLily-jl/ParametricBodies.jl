@@ -33,7 +33,7 @@ end
 Creates a `DynamicBody` with `locate=NurbsLocator(surf,uv_bounds...)`.
 """
 DynamicBody(surf,uv_bounds::Tuple;dist=dis,step=1,t⁰=0.,T=Float64,mem=Array) =
-    adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,T,mem);dist,T))
+    adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,mem);dist,T))
 
 Adapt.adapt_structure(to, x::DynamicBody{T,F,L,V,D}) where {T,F,L<:NurbsLocator,V,D} =
                       DynamicBody(x.surf,adapt(to,x.locate),x.velocity,x.scale,x.dist)
@@ -74,6 +74,25 @@ end
 function norm_dir(nurbs::NurbsCurve{3},uv::Number,p::SVector{3},t)
     s = ForwardDiff.derivative(uv->nurbs(uv,t),uv); s/=√(s'*s)
     return p-dot(p,s)*s
+end
+
+"""
+    ∮nds(p,body::DynamicBody,t=0)
+
+Surface normal pressure integral along the parametric curve(s)
+"""
+function ∮nds(p::AbstractArray{T},body::DynamicBody,t=0;N=64) where T
+    open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
+    integrate(s->_pforce(body.surf,p,s,t,Val{open}()),body.surf,t,body.locate.lims;N)
+end
+"""
+    ∮τnds(u,body::DynamicBody,t=0)
+
+Surface normal pressure integral along the parametric curve(s)
+"""
+function ∮τnds(u::AbstractArray{T},body::DynamicBody,t=0;N=64) where T
+    open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
+    integrate(s->_vforce(body.surf,u,s,t,body.velocity(s,0),Val{open}()),body.surf,t,body.locate.lims;N)
 end
 
 """

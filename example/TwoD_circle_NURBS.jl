@@ -3,23 +3,24 @@ using ParametricBodies
 using StaticArrays
 include("viz.jl")
 
-# parameters
-L=2^5
-Re=250
-U =1
+function make_sim(;L=2^5,Re=250,U=1,mem=Array,T=Float32)
 
-# NURBS points, weights and knot vector for a circle
-cps = SA[1 1 0 -1 -1 -1  0  1 1
-         0 1 1  1  0 -1 -1 -1 0]*L/2 .+ [2L,3L]
-weights = SA[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
-knots =   SA[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1]
+    # NURBS points, weights and knot vector for a circle
+    cps = SA{T}[1 1 0 -1 -1 -1  0  1 1
+                0 1 1  1  0 -1 -1 -1 0]*L/2 .+ [2L,3L]
+    weights = SA{T}[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
+    knots =   SA{T}[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1]
 
-# make a nurbs curve
-circle = NurbsCurve(cps,knots,weights)
+    # make a nurbs curve
+    circle = NurbsCurve(cps,knots,weights)
 
-# make a body and a simulation
-Body = ParametricBody(circle,(0,1))
-sim = Simulation((8L,6L),(U,0),L;U,ν=U*L/Re,body=Body,T=Float64)
+    # make a body and a simulation
+    Body = ParametricBody(circle,(0,1);T=T,mem=mem)
+    Simulation((8L,6L),(U,0),L;U,ν=U*L/Re,body=Body,T=T,mem=mem)
+end
+
+# make a sim
+sim = make_sim()
 
 # set -up simulations time and time-step for ploting
 t₀ = round(sim_time(sim))
@@ -34,6 +35,9 @@ anim = @animate for tᵢ in range(t₀,t₀+duration;step=tstep)
     # flood plot
     get_omega!(sim);
     plot_vorticity(sim.flow.σ, limit=10)
+    pforce = ParametricBodies.∮nds(sim.flow.p,sim.body,tᵢ)
+    vforce = ParametricBodies.∮τnds(sim.flow.u,sim.body,tᵢ)
+    @show vforce,pforce
 
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))

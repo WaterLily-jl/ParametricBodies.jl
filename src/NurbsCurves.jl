@@ -13,20 +13,21 @@ Define a non-uniform rational B-spline curve.
 - `wgts`: A 1D array of the wight of the pnts of the NURBS curve 
 - `d`: The degree of the NURBS curve
 - `n`: the spacial dimension of the NURBS curve, n ∈ {2,3}
+- `O`: Open or closed NURBS curve
 """
-struct NurbsCurve{n,d,A<:AbstractArray,V<:AbstractVector,W<:AbstractVector} <: Function
+struct NurbsCurve{n,d,O,A<:AbstractArray,V<:AbstractVector,W<:AbstractVector} <: Function
     pnts::A
     knots::V
     wgts::W
-    vel::Union{Nothing,A}
 end
-function NurbsCurve(pnts,knots,weights;vel=nothing)
+function NurbsCurve(pnts,knots,weights)
     (dim,count),T = size(pnts),promote_type(eltype(pnts),Float32)
     @assert count == length(weights) "Invalid NURBS: each control point should have a corresponding weights."
     @assert count < length(knots) "Invalid NURBS: the number of knots should be greater than the number of control points."
     degree = length(knots) - count - 1 # the one in the input is not used
     knots = SA{T}[knots...]; weights = SA{T}[weights...]
-    NurbsCurve{dim,degree,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights,vel)
+    open = !all(pnts[:,1].≈pnts[:,end]) ? Open : Closed
+    NurbsCurve{dim,degree,open,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights)
 end
 Base.copy(n::NurbsCurve) = NurbsCurve(copy(n.pnts),copy(n.knots),copy(n.wgts))
 
@@ -38,12 +39,13 @@ Define a uniform B-spline curve.
 - `degree`: The degree of the B-spline curve
 Note: An open, uniform knot vector for a degree `degree` B-spline is constructed by default.
 """
-function BSplineCurve(pnts;degree=1,vel=nothing)
+function BSplineCurve(pnts;degree=1)
     (dim,count),T = size(pnts),promote_type(eltype(pnts),Float32)
     @assert degree <= count - 1 "Invalid B-Spline: the degree should be less than the number of control points minus 1."
     knots = SA{T}[[zeros(degree); collect(range(0, count-degree) / (count-degree)); ones(degree)]...]
     weights = SA{T}[ones(count)...]
-    NurbsCurve{dim,degree,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights,vel)
+    open = !all(pnts[:,1].≈pnts[:,end]) ? Open : Closed
+    NurbsCurve{dim,degree,open,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights)
 end
 
 """
@@ -62,16 +64,6 @@ function (l::NurbsCurve{n,d})(u::T,t)::SVector where {T,d,n}
     end
     pt/wsum
 end
-function velocity(l::NurbsCurve{n,d},u::T,t)::SVector where {T,d,n}
-    vel = zeros(SVector{n,T}); wsum=T(0.0)
-    isnothing(l.vel) && return vel # zero velocity by default
-    for k in 1:size(l.vel, 2)
-        l.knots[k]>u && break
-        l.knots[k+d+1]≥u && (prod = Bd(l.knots,u,k,Val(d))*l.wgts[k];
-                             vel +=prod*l.vel[:,k]; wsum+=prod)
-    end
-    vel/wsum
-end
 
 """
     Bd(knot, u, k, ::Val{d}) where d
@@ -87,38 +79,35 @@ function Bd(knots, u::T, k, ::Val{d}) where {T,d}
     ((u-knots[k])/max(eps(T),knots[k+d]-knots[k])*Bd(knots,u,k,Val(d-1))
     +(knots[k+d+1]-u)/max(eps(T),knots[k+d+1]-knots[k+1])*Bd(knots,u,k+1,Val(d-1)))
 end
-"""
-    PForce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
 
-Compute the normal (Pressure) force on the NurbsCurve curve from a pressure field `p`
-at the parametric coordinate `s`. Useful to compute the force at an integration point
-along the NurbsCurve
-"""
-NurbsForce(surf,p,s,δ=1.0) = _pforce(surf,p,s,δ) # Backward compatibility
-function _pforce(surf::NurbsCurve,p::AbstractArray{T},s,t,δ=1.0) where T
-    xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
-    return -(interp(xᵢ+δ*nᵢ,p)-interp(xᵢ-δ*nᵢ,p))*nᵢ
-end
-function _vforce(surf::NurbsCurve,u::AbstractArray{T},s,t,v,δ=1.0) where T
-    xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
-    vᵢ = velocity(surf,s,t); τ = SVector{length(vᵢ),T}(zero(vᵢ))
-    vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ
-    for j ∈ [-1,1]
-        uᵢ = interp(xᵢ+j*δ*nᵢ,u)
-        uᵢ = uᵢ .- sum(uᵢ.*nᵢ)*nᵢ
-        τ = τ + (uᵢ.-vᵢ)./δ
-    end
-    return τ
-end
 # """
-#     PForce(surf::NurbsCurve,p::AbstractArray{T}) where T
+#     _pforce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
 
-# Compute the total force acting on a NurbsCurve from a pressure field `p`.
+# Compute the normal (Pressure) force on the NurbsCurve curve from a pressure field `p`
+# at the parametric coordinate `s`.
 # """
-# pforce(surf::NurbsCurve,p::AbstractArray{T};N=64) where T = 
-#                        integrate(s->PForce(surf,p,s),surf;N)
-# vforce(surf::NurbsCurve,u::AbstractArray{T};N=64) where T = 
-#                        integrate(s->VForce(surf,u,s),surf;N)
+# function _pforce(surf::NurbsCurve{n,d,Open},p::AbstractArray{T},s::T,t,δ=1) where {n,d,T}
+#     xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
+#     return (interp(xᵢ+δ*nᵢ,p)-interp(xᵢ-δ*nᵢ,p))*nᵢ
+# end
+# """
+#     _vforce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
+
+# Compute the normal (viscous) force on the NurbsCurve curve from a velocity field `u`
+# at the parametric coordinate `s`. First order FD.
+# """
+# function _vforce(surf::NurbsCurve{n,d,Open},u::AbstractArray{T},s::T,t,vᵢ,δ=1) where {n,d,T}
+#     xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
+#     τ = zeros(SVector{n,T})
+#     vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ
+#     for j ∈ [-1,1]
+#         uᵢ = interp(xᵢ+j*δ*nᵢ,u)
+#         uᵢ = uᵢ .- sum(uᵢ.*nᵢ)*nᵢ
+#         τ = τ + (uᵢ.-vᵢ)./δ
+#     end
+#     return τ
+# end
+
 """
     interpNurbs(pnts{D,n};p=n-1)
 
@@ -142,27 +131,4 @@ end
 function _u(pnts::SMatrix{D,n,T}) where {D,n,T}
     d = sum([norm(pnts[:,k]-pnts[:,k-1]) for k ∈ 2:n])
     vcat(zero(T),cumsum([norm(pnts[:,k]-pnts[:,k-1])/d for k ∈ 2:n]))
-end
-"""
-    f(C::NurbsCurve, N::Integer=100)
-
-Plot `recipes` for `NurbsCurve`, plot the `NurbsCurve` and the control points.
-"""
-@recipe function f(C::NurbsCurve, N::Integer=100; add_cp=true, shift=[0.,0.])
-    seriestype := :path
-    primary := false
-    @series begin
-        linecolor := :black
-        linewidth := 2
-        markershape := :none
-        c = [C(s,0.0) for s ∈ 0:1/N:1]
-        getindex.(c,1).+shift[1],getindex.(c,2).+shift[2]
-    end
-    @series begin
-        linewidth  --> (add_cp ? 1 : 0)
-        markershape --> (add_cp ? :circle : :none)
-        markersize --> (add_cp ? 4 : 0)
-        delete!(plotattributes, :add_cp)
-        C.pnts[1,:].+shift[1],C.pnts[2,:].+shift[2]
-    end
 end

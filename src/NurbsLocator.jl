@@ -28,9 +28,9 @@ struct NurbsLocator{T,F<:Function,G<:Function,B<:AbstractVector{T}}
 end
 Adapt.adapt_structure(to, x::NurbsLocator) = NurbsLocator(x.refine,x.surf,x.lims,adapt(to,x.lower),adapt(to,x.upper),x.step)
 
-function NurbsLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
+function NurbsLocator(curve::NurbsCurve{n},lims;t⁰=0,step=1,buffer=2,mem=Array) where n
     # Apply type and get refinement function
-    lims,t⁰,step = T.(lims),T(t⁰),T(step)
+    T = eltype(curve.pnts); lims,t⁰,step = T.(lims),T(t⁰),T(step)
     f = refine(curve,lims,curve(first(lims),t⁰)≈curve(last(lims),t⁰))
 
     # Get curve's bounding box
@@ -38,7 +38,7 @@ function NurbsLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
     lower = curve(first(samples),t⁰) |> mem; upper = curve(last(samples),t⁰) |> mem
     @assert eltype(lower)==T "`curve` is not type stable"
     N = length(curve(first(samples),t⁰))
-    @assert isa(curve(first(samples),t⁰),SVector{N,T}) "`curve` doesn't return a 2D SVector"
+    @assert isa(curve(first(samples),t⁰),SVector{n,T}) "`curve` doesn't return a 2D SVector"
 
     # Allocate struct, and update
     l=adapt(mem,NurbsLocator{T,typeof(f),typeof(curve),typeof(lower)}(f,curve,lims,lower,upper,step))
@@ -73,15 +73,15 @@ Estimate the parameter value `uv⁺ = argmin_uv (X-curve(uv,t))²` in two steps:
 1. Interploate an initial guess  `uv=l(x)`. Return `uv⁺~uv` if `x` is outside the bounding box.
 2. Apply a bounded Newton step `uv⁺≈l.refine(x,uv,t)` to refine the estimate.
 """
-function (l::NurbsLocator)(x,t)
+function (l::NurbsLocator{T})(x,t) where T
     # check if the point is in bounding box
     inside = all(x.>l.lower) && all(x.<l.upper)
     # if we are outside, this is sufficient
-    !inside && return 0.5
+    !inside && return T(0.5)
 
     # Grid search for uv within bounds
     @inline dis2(uv) = (q=x-l.surf(uv,t); q'*q)
-    uv = 0.0; d = dis2(uv)
+    uv = zero(T); d = dis2(uv)
     for uvᵢ in range(l.lims...,64)
         dᵢ = dis2(uvᵢ)
         dᵢ<d && (uv=uvᵢ; d=dᵢ)
