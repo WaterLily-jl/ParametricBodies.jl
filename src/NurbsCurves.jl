@@ -2,7 +2,6 @@ using StaticArrays
 using ForwardDiff: derivative
 using FastGaussQuadrature: gausslegendre
 using LinearAlgebra: norm
-using RecipesBase: @recipe, @series
 
 """
     NurbsCurve(pnts,knos,weights)
@@ -13,9 +12,8 @@ Define a non-uniform rational B-spline curve.
 - `wgts`: A 1D array of the wight of the pnts of the NURBS curve 
 - `d`: The degree of the NURBS curve
 - `n`: the spacial dimension of the NURBS curve, n ∈ {2,3}
-- `O`: Open or closed NURBS curve
 """
-struct NurbsCurve{n,d,O,A<:AbstractArray,V<:AbstractVector,W<:AbstractVector} <: Function
+struct NurbsCurve{n,d,A<:AbstractArray,V<:AbstractVector,W<:AbstractVector} <: Function
     pnts::A
     knots::V
     wgts::W
@@ -26,8 +24,7 @@ function NurbsCurve(pnts,knots,weights)
     @assert count < length(knots) "Invalid NURBS: the number of knots should be greater than the number of control points."
     degree = length(knots) - count - 1 # the one in the input is not used
     knots = SA{T}[knots...]; weights = SA{T}[weights...]
-    open = !all(pnts[:,1].≈pnts[:,end]) ? Open : Closed
-    NurbsCurve{dim,degree,open,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights)
+    NurbsCurve{dim,degree,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights)
 end
 Base.copy(n::NurbsCurve) = NurbsCurve(copy(n.pnts),copy(n.knots),copy(n.wgts))
 
@@ -44,8 +41,7 @@ function BSplineCurve(pnts;degree=1)
     @assert degree <= count - 1 "Invalid B-Spline: the degree should be less than the number of control points minus 1."
     knots = SA{T}[[zeros(degree); collect(range(0, count-degree) / (count-degree)); ones(degree)]...]
     weights = SA{T}[ones(count)...]
-    open = !all(pnts[:,1].≈pnts[:,end]) ? Open : Closed
-    NurbsCurve{dim,degree,open,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights)
+    NurbsCurve{dim,degree,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights)
 end
 
 """
@@ -79,28 +75,6 @@ function Bd(knots, u::T, k, ::Val{d}) where {T,d}
     ((u-knots[k])/max(eps(T),knots[k+d]-knots[k])*Bd(knots,u,k,Val(d-1))
     +(knots[k+d+1]-u)/max(eps(T),knots[k+d+1]-knots[k+1])*Bd(knots,u,k+1,Val(d-1)))
 end
-"""
-    NurbsForce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
-
-Compute the normal (Pressure) force on the NurbsCurve curve from a pressure field `p`
-at the parametric coordinate `s`. Useful to compute the force at an integration point
-along the NurbsCurve
-"""
-function NurbsForce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
-    xᵢ = surf(s,0.0)
-    δnᵢ = δ*ParametricBodies.norm_dir(surf,s,0.0); δnᵢ/=√(δnᵢ'*δnᵢ)
-    Δpₓ = interp(xᵢ+δnᵢ,p)-interp(xᵢ-δnᵢ,p)
-    return -Δpₓ.*δnᵢ
-end
-"""
-    NurbsForce(surf::NurbsCurve,p::AbstractArray{T}) where T
-
-Compute the total force acting on a NurbsCurve from a pressure field `p`.
-"""
-force(surf::NurbsCurve,p::AbstractArray{T}) where {T} = 
-        integrate(s->NurbsForce(surf,p,s),surf;N=64)
-"""
-    integrate(f(uv),curve;N=64)
 
 """
     interpNurbs(pnts{D,n};p=n-1)

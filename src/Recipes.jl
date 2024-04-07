@@ -1,3 +1,4 @@
+using RecipesBase: @recipe, @series
 """
     f(C::NurbsCurve, N::Integer=100)
 

@@ -7,7 +7,7 @@ include("HashedLocators.jl")
 export HashedLocator, refine, mymod
 
 include("NurbsCurves.jl")
-export NurbsCurve, BSplineCurve, integrate, force, NurbsForce
+export NurbsCurve,BSplineCurve,interpNurbs,integrate
 
 import WaterLily: AbstractBody,measure,sdf,interp
 """

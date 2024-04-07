@@ -2,6 +2,7 @@ using WaterLily
 using ParametricBodies
 using StaticArrays
 using CUDA
+using WriteVTK
 # parameters
 function dynamicSpline(;L=2^4,Re=250,U =1,ϵ=0.5,thk=2ϵ+√2,mem=Array)
     # define a flat plat at and angle of attack
@@ -24,18 +25,14 @@ velocity(a::Simulation) = a.flow.u |> Array;
 pressure(a::Simulation) = a.flow.p |> Array;
 body(a::Simulation) = (measure_sdf!(a.flow.σ, a.body); 
                        a.flow.σ |> Array;)
-lamda2(a::Simulation) = (@inside a.flow.σ[I] = 
-                         WaterLily.λ₂(I,a.flow.u)*a.L/a.U;
-                         a.flow.σ |> Array;)
 custom_attrib = Dict(
     "Velocity" => velocity,
     "Pressure" => pressure,
-    "Body" => body,
-    "Lambda_2" => lamda2,
+    "Body" => body
 )# this maps what to write to the name in the file
 
 # # intialize
-sim = dynamicSpline(mem=CuArray);
+sim = dynamicSpline(mem=Array);
 t₀,duration,tstep = sim_time(sim),10,0.1;
 wr = vtkWriter("ThreeD_nurbs"; attrib=custom_attrib)
 
@@ -46,10 +43,6 @@ for tᵢ in range(t₀,t₀+duration;step=tstep)
     t = sum(sim.flow.Δt[1:end-1])
     while t < tᵢ*sim.L/sim.U
         # random update
-        new_pnts = (SA[-1     0   1
-                        0.5 0.25+0.5*sin(π/4*t/sim.L) 0
-                        0     0   0]*sim.L .+ [2sim.L,3sim.L,8])
-        ParametricBodies.update!(sim.body,new_pnts,sim.flow.Δt[end])
         measure!(sim,t)
         mom_step!(sim.flow,sim.pois) # evolve Flow
         t += sim.flow.Δt[end]
