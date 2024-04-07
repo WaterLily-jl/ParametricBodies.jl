@@ -4,14 +4,10 @@ using StaticArrays,ForwardDiff
 using Adapt,KernelAbstractions
 
 include("HashedLocators.jl")
-export HashedLocator,refine,mymod
-
-abstract type Open end   # facilitate open and closed curve distinction
-abstract type Closed end
-export Open,Closed
+export HashedLocator, refine, mymod
 
 include("NurbsCurves.jl")
-export NurbsCurve,BSplineCurve,interpNurbs,integrate,pforce,vforce,NurbsForce
+export NurbsCurve, BSplineCurve, integrate, force, NurbsForce
 
 import WaterLily: AbstractBody,measure,sdf,interp
 """
@@ -61,7 +57,7 @@ end
 
 import LinearAlgebra: det
 get_scale(map,x::SVector{D},t=0.) where D = (dξdx=ForwardDiff.jacobian(x->map(x,t),x); abs(det(dξdx))^(-1/D))
-
+  
 """
     d,n,V = measure(body::ParametricBody,x,t)
 

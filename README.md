@@ -17,3 +17,48 @@ Cloning into 'ParametricBodies.jl'...
 ] activate ParametricBodies
 ] instantiate
 ```
+
+### Usage
+
+`ParametricBodies.jl` allows to define two types of bodies: `ParametricBody` and `DynamicBody`.
+
+##### Parametric Bodies
+
+A `ParametricBody` can be define from a parametric function repsentation of that shape. For example, a circle can be defined as
+```julia
+circle(s,t) = SA[sin(2π*s),cos(2π*s)] # a circle
+Body = ParametricBody(circle, (0,1))
+```
+The interval `(0,1)` gives the interval in which the parametric curve is defined
+
+`ParametricBody` can be made dynamic by specifying a mapping to the `ParametricBody` type
+```julia
+heave(x,t) = SA[0.,sin(2π*t)]
+Body = ParametricBody(circle, (0,1); map=heave)
+```
+
+
+##### Dynamic Bodies
+
+`DynamicBodies` can be constructed from `NurbsCurves` and `BSplineCurves` and allow the user to adjust (move) the curve's control points during the simulations. Internally, `BSplineCurves` are `NurbsCurves` and the `DynamicBody` is constructed from the `NurbsCurve` and a `NurbsLocator` is created to allow for a fast and robust evaluation of the location of the closest point on the curve.
+
+Dynamic adjustement of control points requires creating the curves' control point with a `MMatrix` from the `StaticArrays` package as such
+
+```julia
+cps = MMatrix(SA[1 0 -1; 0 0 0])
+spline = BSplineCurve(cps; degree=2)
+Body = DynamicBody(spline,(0,1))
+```
+Updating the control point is can be simply done by passing the new control point position and a time step (used to compute the NURBS' velocity)
+```julia
+update!(DynamicBody, new_cps, Δt)
+```
+
+##### Overloading signed distance function
+
+By default, `DynamicBody` uses a signed distance function to the parametric curve. This might not be the desired behaviour and can be overloaded by defining a new `dist` function. For example, to overload the signed distance function a spline with a thickness of `thk` one can do
+```julia
+new_dist(p,n) = √(p'*p) - thk/2
+DynamicBody(spline,(0,1);dist=new_dist)
+```
+This is demonstrated in [examples/TwoD_nurbs.jl](./example/TwoD_nurbs.jl).
