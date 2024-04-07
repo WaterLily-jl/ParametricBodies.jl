@@ -7,7 +7,7 @@ include("HashedLocators.jl")
 export HashedLocator, refine, mymod
 
 include("NurbsCurves.jl")
-export NurbsCurve,BSplineCurve,interpNurbs,integrate
+export NurbsCurve,BSplineCurve,interpNurbs
 
 import WaterLily: AbstractBody,measure,sdf,interp
 """
@@ -117,6 +117,7 @@ ParametricBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float64,mem=Array,map=(x,t
 update!(body::ParametricBody{T,F,L},t) where {T,F,L<:HashedLocator} = 
     update!(body.locate,body.surf,t)
 
+using FastGaussQuadrature: gausslegendre
 """
     integrate(f(uv),curve;N=64)
 
@@ -131,7 +132,7 @@ function integrate(f::Function,curve::Function,t,lims::NTuple{2,T};N=64) where T
     uv_, w_ = _gausslegendre(N,T)
     # map onto the (uv) interval, need a weight scalling
     scale=(lims[2]-lims[1])/2; uv_=scale*(uv_.+1); w_=scale*w_ 
-    sum([f(uv)*norm(derivative(uv->curve(uv,t),uv))*w for (uv,w) in zip(uv_,w_)])
+    sum([f(uv)*norm(ForwardDiff.derivative(uv->curve(uv,t),uv))*w for (uv,w) in zip(uv_,w_)])
 end
 """
     ∮nds(p,body::AbstractParametricBody,t=0)

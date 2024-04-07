@@ -1,7 +1,4 @@
 using StaticArrays
-using ForwardDiff: derivative
-using FastGaussQuadrature: gausslegendre
-using LinearAlgebra: norm
 
 """
     NurbsCurve(pnts,knos,weights)
@@ -96,6 +93,7 @@ function interpNurbs(pnts::SMatrix{D,n,T};p=n-1) where {D,n,T}
     # build NurbsCurve and return it
     NurbsCurve(cpns,knot,ones(size(cpns,2)))
 end
+using LinearAlgebra: norm
 function _u(pnts::SMatrix{D,n,T}) where {D,n,T}
     d = sum([norm(pnts[:,k]-pnts[:,k-1]) for k ∈ 2:n])
     vcat(zero(T),cumsum([norm(pnts[:,k]-pnts[:,k-1])/d for k ∈ 2:n]))

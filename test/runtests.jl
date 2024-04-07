@@ -166,3 +166,31 @@ end
     # carefull not to be outside bounding box.
     @test all(measure(Body,[1,0.85],0) .≈ [1.85,[0.,1.],[0.,-1]])
 end
+@testset "Forces" begin
+    for T in (Float32,Float64)
+        L = 32
+        # NURBS points, weights and knot vector for a circle
+        cps = SA{T}[1 1 0 -1 -1 -1  0  1 1
+                    0 1 1  1  0 -1 -1 -1 0]*L/2 .+ [L,L]
+        weights = SA{T}[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
+        knots =   SA{T}[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1]
+
+        # make different types of bodies
+        close_parametric_body = ParametricBody(NurbsCurve(cps,knots,weights),(0,1);T=T)
+        close_dynamic_body = DynamicBody(NurbsCurve(cps,knots,weights),(0,1);T=T)
+        open_parametric_body = ParametricBody(BSplineCurve(copy(cps[:,1:end-3]);degree=2),(0,1);T=T)
+        open_dynamic_body = DynamicBody(BSplineCurve(copy(cps[:,1:end-3]);degree=2),(0,1);T=T)
+
+        # dymmy pressure and velocity
+        p = ones(T, 2L,2L); u = ones(T, 2L,2L,2);
+
+        # check global behaviour
+        # @test all(ParametricBodies.∮nds(p,close_parametric_body,zero(T)).≈ParametricBodies.∮nds(p,close_dynamic_body,zero(T)))
+        # @test all(ParametricBodies.∮nds(p,open_parametric_body ,zero(T)).≈ParametricBodies.∮nds(p,open_dynamic_body,zero(T)))
+
+        # check nested behaviour
+        pf = ParametricBodies._pforce
+        # @test all(pf(close_parametric_body.surf,p,zero(T),zero(T),Val{false}()).≈pf(close_dynamic_body.surf,p,zero(T),zero(T),Val{false}()))
+        # @test all(pf(open_parametric_body.surf ,p,zero(T),zero(T),Val{true}() ).≈pf(open_dynamic_body.surf ,p,zero(T),zero(T),Val{true}() ))
+    end
+end
