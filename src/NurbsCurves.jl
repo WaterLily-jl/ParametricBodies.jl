@@ -80,34 +80,6 @@ function Bd(knots, u::T, k, ::Val{d}) where {T,d}
     +(knots[k+d+1]-u)/max(eps(T),knots[k+d+1]-knots[k+1])*Bd(knots,u,k+1,Val(d-1)))
 end
 
-# """
-#     _pforce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
-
-# Compute the normal (Pressure) force on the NurbsCurve curve from a pressure field `p`
-# at the parametric coordinate `s`.
-# """
-# function _pforce(surf::NurbsCurve{n,d,Open},p::AbstractArray{T},s::T,t,δ=1) where {n,d,T}
-#     xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
-#     return (interp(xᵢ+δ*nᵢ,p)-interp(xᵢ-δ*nᵢ,p))*nᵢ
-# end
-# """
-#     _vforce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
-
-# Compute the normal (viscous) force on the NurbsCurve curve from a velocity field `u`
-# at the parametric coordinate `s`. First order FD.
-# """
-# function _vforce(surf::NurbsCurve{n,d,Open},u::AbstractArray{T},s::T,t,vᵢ,δ=1) where {n,d,T}
-#     xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
-#     τ = zeros(SVector{n,T})
-#     vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ
-#     for j ∈ [-1,1]
-#         uᵢ = interp(xᵢ+j*δ*nᵢ,u)
-#         uᵢ = uᵢ .- sum(uᵢ.*nᵢ)*nᵢ
-#         τ = τ + (uᵢ.-vᵢ)./δ
-#     end
-#     return τ
-# end
-
 """
     interpNurbs(pnts{D,n};p=n-1)
 

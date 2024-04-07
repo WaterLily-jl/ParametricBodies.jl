@@ -9,11 +9,11 @@ function make_sim(;L=32,Re=1e3,St=0.3,U=1,n=8,m=4,Λ=5,T=Float64,mem=Array)
     # make a sim
     Simulation((n*L,m*L),(U,0),L;ν=U*L/Re,body,T,mem)
 end
-# using CUDA
+using CUDA
 include("viz.jl");
 
 # set -up simulations time and time-step for ploting
-sim = make_sim()
+sim = make_sim(;mem=Array,T=Float32)
 t₀ = round(sim_time(sim))
 duration = 1; tstep = 0.1
 
@@ -26,9 +26,9 @@ anim = @animate for tᵢ in range(t₀,t₀+duration;step=tstep)
     # flood plot
     get_omega!(sim);
     plot_vorticity(sim.flow.σ, limit=10)
-    plot!(sim.body)
-    p = ParametricBodies.∮nds(sim.flow.p,sim.body,tᵢ)
-    ν = ParametricBodies.∮τnds(sim.flow.u,sim.body,tᵢ)
+    plot!(sim.body,WaterLily.time(sim))
+    p = ParametricBodies.∮nds(sim.flow.p,sim.body)
+    ν = ParametricBodies.∮τnds(sim.flow.u,sim.body)
     @show p,ν
 
     # print time step

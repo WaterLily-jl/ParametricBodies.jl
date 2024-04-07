@@ -46,13 +46,15 @@ struct ParametricBody{T,S<:Function,L<:Union{Function,HashedLocator},M<:Function
     map::M     #ξ = map(x,t)
     scale::T   #|dx/dξ| = scale
 end
+using CUDA: @allowscalar
 function ParametricBody(surf,locate;map=(x,t)->x,T=Float64)
+    N = length(surf(zero(T),0.))
     # Check input functions
-    x,t = SVector{2,T}(0,0),T(0); ξ = map(x,t)
-    uv = locate(ξ,t); p = ξ-surf(uv,t)
-    @assert isa(ξ,SVector{2,T}) "map is not type stable"
+    x,t = zero(SVector{N,T}),T(0); ξ = map(x,t)
+    @allowscalar uv = locate(ξ,t); p = ξ-surf(uv,t)
+    @assert isa(ξ,SVector{N,T}) "map is not type stable"
     @assert isa(uv,T) "locate is not type stable"
-    @assert isa(p,SVector{2,T}) "surf is not type stable"
+    @assert isa(p,SVector{N,T}) "surf is not type stable"
   
     ParametricBody(surf,locate,map,T(get_scale(map,x)))
 end
@@ -141,7 +143,7 @@ end
 Surface normal pressure integral along the parametric curve(s)
 """
 function ∮nds(p::AbstractArray{T},body::ParametricBody,t=0;N=64) where T
-    curve(ξ,τ) = body.map(body.surf(ξ,τ),τ)
+    curve(ξ,τ) = -body.map(-body.surf(ξ,τ),τ)
     open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
     integrate(s->_pforce(curve,p,s,t,Val{open}()),curve,t,body.locate.lims;N)
 end
@@ -151,7 +153,7 @@ end
 Surface normal pressure integral along the parametric curve(s)
 """
 function ∮τnds(u::AbstractArray{T},body::ParametricBody,t=0;N=64) where T
-    curve(ξ,τ) = body.map(body.surf(ξ,τ),τ)
+    curve(ξ,τ) = -body.map(-body.surf(ξ,τ),τ) # inverse maping
     vel(ξ) = ForwardDiff.derivative(t->curve(ξ,t),t) # get velocity at coordinate ξ
     open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
     integrate(s->_vforce(curve,u,s,t,vel(s),Val{open}()),curve,t,body.locate.lims;N)
@@ -185,20 +187,6 @@ function _vforce(surf,u::AbstractArray{T,N},s::T,t,vᵢ,::Val{true},δ=1) where 
     end
     return τ
 end
-
-# # pressure force on a parametric `surf` (closed) at parametric coordinate `s` and time `t`.
-# function _pforce(surf::Union{Function,NurbsCurve{n,d,Closed}},p::AbstractArray{T},s::T,t,δ=1) where {n,d,T}
-#     xᵢ = surf(s,t); nᵢ = norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
-#     return interp(xᵢ+δ*nᵢ,p).*nᵢ
-# end
-# # viscous force on a parametric `surf` (closed) at parametric coordinate `s` and time `t`.
-# function _vforce(surf::Union{Function,NurbsCurve{n,d,Closed}},u::AbstractArray{T},s::T,t,vᵢ,δ=1) where {n,d,T}
-#     xᵢ = surf(s,t); nᵢ = norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
-#     vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ # tangential comp
-#     uᵢ = interp(xᵢ+δ*nᵢ,u)  # prop in the field
-#     uᵢ = uᵢ .- sum(uᵢ.*nᵢ)*nᵢ # tangential comp
-#     return (uᵢ.-vᵢ)./δ # FD
-# end
 
 export AbstractParametricBody,ParametricBody,measure,sdf,∮nds,∮τnds
 

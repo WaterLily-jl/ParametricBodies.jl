@@ -27,14 +27,14 @@ end
 
 Plot `recipes` for `ParametricBody`.
 """
-@recipe function f(b::ParametricBody, N::Integer=100; shift=[0.,0.])
+@recipe function f(b::ParametricBody, time=0, N::Integer=100; shift=[0.,0.])
     seriestype := :path
     primary := false
     @series begin
         linecolor := :black
         linewidth := 2
         markershape := :none
-        c = [b.surf(s,0.0) for s ∈ range(b.locate.lims...;length=N)]
+        c = [-b.map(-b.surf(s,time),time) for s ∈ range(b.locate.lims...;length=N)]
         getindex.(c,1).+shift[1],getindex.(c,2).+shift[2]
     end
 end

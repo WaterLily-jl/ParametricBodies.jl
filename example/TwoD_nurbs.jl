@@ -48,6 +48,9 @@ anim = @animate for tᵢ in range(t₀,t₀+duration;step=tstep)
              color=palette(:RdBu_11), clims=(-10,10), linewidth=0,
              aspect_ratio=:equal, legend=false, border=:none)
     plot!(sim.body.surf;shift=(0.5,0.5),add_cp=true)
+    l,u = sim.body.locate.lower,sim.body.locate.upper
+    plot!([l[1],l[1],u[1],u[1],l[1]],
+          [l[2],u[2],u[2],l[2],l[2]],color=:black,ls=:dash)
 
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))

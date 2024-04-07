@@ -16,7 +16,7 @@ but can be very unstable for general parametric curves. This is mitigated by sup
     NurbsLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
 
 Creates NurbsLocator by sampling the curve and finding the bounding box. This box is expanded by the amount `buffer`. 
-The hash array is allocated to span the box with resolution `step` and initialized using `update!(::,curve,t⁰,samples)`.
+The hash array is allocated to span the box with resolution `step` and initialized using `update!(::,curve,t⁰)`.
 """
 struct NurbsLocator{T,F<:Function,G<:Function,B<:AbstractVector{T}}
     refine::F
@@ -34,31 +34,29 @@ function NurbsLocator(curve::NurbsCurve{n},lims;t⁰=0,step=1,buffer=2,mem=Array
     f = refine(curve,lims,curve(first(lims),t⁰)≈curve(last(lims),t⁰))
 
     # Get curve's bounding box
-    samples = range(lims...,64)
-    lower = curve(first(samples),t⁰) |> mem; upper = curve(last(samples),t⁰) |> mem
+    lower = curve(first(lims),t⁰) |> mem; upper = curve(last(lims),t⁰) |> mem
     @assert eltype(lower)==T "`curve` is not type stable"
-    N = length(curve(first(samples),t⁰))
-    @assert isa(curve(first(samples),t⁰),SVector{n,T}) "`curve` doesn't return a 2D SVector"
+    @assert isa(curve(first(lims),t⁰),SVector{n,T}) "`curve` doesn't return a 2D SVector"
 
     # Allocate struct, and update
     l=adapt(mem,NurbsLocator{T,typeof(f),typeof(curve),typeof(lower)}(f,curve,lims,lower,upper,step))
-    update!(l,curve,t⁰,samples)
+    update!(l,curve,t⁰)
 end
 
 # if it's open, we need to check that we are not at the endpoints
 notC¹(l::NurbsLocator,uv) = !(l.surf(first(l.lims),0)≈l.surf(last(l.lims),0)) && any(uv.≈l.lims)
 
 """
-    update!(l::NurbsLocator,surf,t,samples=l.lims)
+    update!(l::NurbsLocator,surf,t)
 
 Updates `l` for `surf` at time `t` by searching through `samples` and refining.
 """
-update!(l::NurbsLocator,surf,t,samples=l.lims)=(_update!(get_backend(l.lower),64)(l,surf,samples,t,ndrange=size(l.lower));l)
-@kernel function _update!(l::NurbsLocator{T},surf,@Const(samples),@Const(t)) where T
+update!(l::NurbsLocator,surf,t)=(_update!(get_backend(l.lower),64)(l,surf,t,ndrange=size(l.lower));l)
+@kernel function _update!(l::NurbsLocator{T},surf,@Const(t)) where T
     # update bounding box
-    l.lower .= l.upper .= surf(first(samples),t)
-    for uv in range(l.lims...,64)
-        x = surf(uv,t)
+    l.lower .= l.upper .= surf(zero(T),t)
+    # the cps net in a convex hull of the curve
+    for x in eachcol(surf.pnts)
         l.lower .= min.(l.lower,x)
         l.upper .= max.(l.upper,x)
     end
