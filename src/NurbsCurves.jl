@@ -79,6 +79,28 @@ function Bd(knots, u::T, k, ::Val{d}) where {T,d}
     ((u-knots[k])/max(eps(T),knots[k+d]-knots[k])*Bd(knots,u,k,Val(d-1))
     +(knots[k+d+1]-u)/max(eps(T),knots[k+d+1]-knots[k+1])*Bd(knots,u,k+1,Val(d-1)))
 end
+"""
+    NurbsForce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
+
+Compute the normal (Pressure) force on the NurbsCurve curve from a pressure field `p`
+at the parametric coordinate `s`. Useful to compute the force at an integration point
+along the NurbsCurve
+"""
+function NurbsForce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
+    xᵢ = surf(s,0.0)
+    δnᵢ = δ*ParametricBodies.norm_dir(surf,s,0.0); δnᵢ/=√(δnᵢ'*δnᵢ)
+    Δpₓ = interp(xᵢ+δnᵢ,p)-interp(xᵢ-δnᵢ,p)
+    return -Δpₓ.*δnᵢ
+end
+"""
+    NurbsForce(surf::NurbsCurve,p::AbstractArray{T}) where T
+
+Compute the total force acting on a NurbsCurve from a pressure field `p`.
+"""
+force(surf::NurbsCurve,p::AbstractArray{T}) where {T} = 
+        integrate(s->NurbsForce(surf,p,s),surf;N=64)
+"""
+    integrate(f(uv),curve;N=64)
 
 # """
 #     _pforce(surf::NurbsCurve,p::AbstractArray{T},s,δ=2.0) where T
