@@ -116,37 +116,81 @@ using LinearAlgebra,ForwardDiff,CUDA
         body = ParametricBody(circle, (0,1), T=Float32, mem=CuArray);
         @CUDA.allowscalar @test all(measure(body,SA_F32[-6,0],0) .≈ [1,[-1,0],[0,0]])
     end
+
+    # test interpolation base on the NURBS-book p.367 Ex9.1
+    pnts = SA[0. 3. -1. -4  -4.
+              0. 4.  4.  0. -3.]
+    nurbs,s = interpNurbs(pnts;p=3),ParametricBodies._u(pnts)
+    @test all(s.≈[0.,5/17,9/17,14/17,1.])
+    @test all(nurbs.knots.≈[0.,0.,0.,0.,28/51,1.,1.,1.,1.])
+    @test all(reduce(hcat,nurbs.(s,0.0)).-pnts.<10eps(eltype(pnts)))
 end
 @testset "DynamicBody.jl" begin
     # define a curve
-    cps = SA[-1 0 1
-              0 0 0]
+    cps = SA[-1. 0. 1.
+              0. 0. 0.]
     cps_m = MMatrix(cps)
     weights = SA[1.,1.,1.]
-    knots =   SA[0,0,0,1,1,1.]
+    knots =   SA[0.,0.,0.,1.,1.,1.]
 
     # make a nurbs curve
     nurbs = NurbsCurve(cps_m,knots,weights)
-    Body = DynamicBody(nurbs,(0,1))
+    Body = DynamicBody(nurbs,(0,1);dist=(p,n)->√(p'*p))
 
-    # check some distance
+    #Test on CUDA: THIS DOE NOT WORK YET
+    # if(CUDA.functional())
+        # Body = DynamicBody(nurbs,(0,1), T=Float32, mem=CuArray);
+        # @CUDA.allowscalar @test all(measure(Body,SA_F32[1,1],0) .≈ [1,[0.,1.],[0.,0.]])
+    # end
+
+    # # check some distance
     @test all(measure(Body,[1,1],0) .≈ [1,[0.,1.],[0.,0.]])
     # update, should now have a velocity
     ParametricBodies.update!(Body,cps.-[0,1],1.0)
-    @test all(measure(Body,[1,1],0) .≈ [2,[0.,1.],[0.,-1]])
+    # carefull not to be outside bounding box.
+    @test all(measure(Body,[1,0.85],0) .≈ [1.85,[0.,1.],[0.,-1]])
     
     # same for B-Splines, define a curve
-    cps = SA[-1 0 1
-              0 0 0]
+    cps = SA[-1. 0. 1.
+              0. 0. 0.]
     cps_m = MMatrix(cps)
 
     # make a nurbs curve
     bspline = BSplineCurve(cps_m;degree=2)
-    Body = DynamicBody(bspline,(0,1))
+    Body = DynamicBody(bspline,(0,1);dist=(p,n)->√(p'*p))
 
     # check some distance
-    @test all(measure(Body,[1,1],0) .≈ [1,[0.,1.],[0.,0.]])
+    @test all(measure(Body,[1,1],0) .≈ [1.,[0.,1.],[0.,0.]])
     # update, should now have a velocity
-    ParametricBodies.update!(Body,cps.-[0,1],1.0)
-    @test all(measure(Body,[1,1],0) .≈ [2,[0.,1.],[0.,-1]])
+    ParametricBodies.update!(Body,cps.-[0.,1.],1.0)
+    # carefull not to be outside bounding box.
+    @test all(measure(Body,[1,0.85],0) .≈ [1.85,[0.,1.],[0.,-1]])
+end
+@testset "Forces" begin
+    for T in (Float32,Float64)
+        L = 32
+        # NURBS points, weights and knot vector for a circle
+        cps = SA{T}[1 1 0 -1 -1 -1  0  1 1
+                    0 1 1  1  0 -1 -1 -1 0]*L/2 .+ [L,L]
+        weights = SA{T}[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
+        knots =   SA{T}[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1]
+
+        # make different types of bodies
+        close_parametric_body = ParametricBody(NurbsCurve(cps,knots,weights),(0,1);T=T)
+        close_dynamic_body = DynamicBody(NurbsCurve(cps,knots,weights),(0,1);T=T)
+        open_parametric_body = ParametricBody(BSplineCurve(copy(cps[:,1:end-3]);degree=2),(0,1);T=T)
+        open_dynamic_body = DynamicBody(BSplineCurve(copy(cps[:,1:end-3]);degree=2),(0,1);T=T)
+
+        # dymmy pressure and velocity
+        p = ones(T, 2L,2L); u = ones(T, 2L,2L,2);
+
+        # check global behaviour
+        # @test all(ParametricBodies.∮nds(p,close_parametric_body,zero(T)).≈ParametricBodies.∮nds(p,close_dynamic_body,zero(T)))
+        # @test all(ParametricBodies.∮nds(p,open_parametric_body ,zero(T)).≈ParametricBodies.∮nds(p,open_dynamic_body,zero(T)))
+
+        # check nested behaviour
+        pf = ParametricBodies._pforce
+        # @test all(pf(close_parametric_body.surf,p,zero(T),zero(T),Val{false}()).≈pf(close_dynamic_body.surf,p,zero(T),zero(T),Val{false}()))
+        # @test all(pf(open_parametric_body.surf ,p,zero(T),zero(T),Val{true}() ).≈pf(open_dynamic_body.surf ,p,zero(T),zero(T),Val{true}() ))
+    end
 end

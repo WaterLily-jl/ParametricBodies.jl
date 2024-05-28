@@ -2,21 +2,20 @@ using WaterLily
 using ParametricBodies
 using StaticArrays
 using Plots
-using CUDA
+# using CUDA
 # parameters
 function dynamicSpline(;L=2^4,Re=250,U =1,ϵ=0.5,thk=2ϵ+√2,mem=Array)
     # define a flat plat at and angle of attack
     cps = SA[-1   0   1
-            0.5 0.25 0]*L .+ [2L,3L]
+             0.5 0.25 0]*L .+ [2L,3L]
 
     # needed if control points are moved
     cps_m = MMatrix(cps)
-    # weights = SA[1.,1.,1.]
-    # knots =   SA[0,0,0,1,1,1.]
+    weights = SA[1.,1.,1.]
+    knots =   SA[0,0,0,1,1,1.]
 
     # make a nurbs curve
-    # circle = NurbsCurve(cps_m,knots,weights)
-    circle = BSplineCurve(cps_m;degree=2)
+    circle = NurbsCurve(cps_m,knots,weights)
 
     # use BDIM-σ distance function, make a body and a Simulation
     dist(p,n)=√(p'*p)-thk/2
@@ -48,7 +47,10 @@ anim = @animate for tᵢ in range(t₀,t₀+duration;step=tstep)
     contourf(clamp.(sim.flow.σ,-10,10)',dpi=300,
              color=palette(:RdBu_11), clims=(-10,10), linewidth=0,
              aspect_ratio=:equal, legend=false, border=:none)
-    plot!(sim.body.surf; add_cp=true)
+    plot!(sim.body.surf;shift=(0.5,0.5),add_cp=true)
+    l,u = sim.body.locate.lower,sim.body.locate.upper
+    plot!([l[1],l[1],u[1],u[1],l[1]],
+          [l[2],u[2],u[2],l[2],l[2]],color=:black,ls=:dash)
 
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))

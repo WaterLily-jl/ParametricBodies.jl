@@ -18,10 +18,11 @@ struct DynamicBody{T,S<:Function,L<:Union{Function,NurbsLocator},V<:Function,D<:
 end
 function DynamicBody(surf,locate;dist=dis,T=Float64)
     # Check input functions
-    x,t = SVector{2,T}(0,0),T(0);
-    @CUDA.allowscalar uv = locate(x,t); p = x-surf(uv,t)
+    N = length(locate.lower)
+    x,t = zeros(SVector{N,T}),T(0);
+    uv = locate(x,t); p = x-surf(uv,t)
     @assert isa(uv,T) "locate is not type stable"
-    @assert isa(p,SVector{2,T}) "surf is not type stable"
+    @assert isa(p,SVector{N,T}) "surf is not type stable"
     @assert isa(dist(x,x),T) "dist is not type stable"
     dsurf = copy(surf); dsurf.pnts .= 0.0 # zero velocity
     DynamicBody(surf,locate,dsurf,T(1.0),dist)
@@ -32,7 +33,7 @@ end
 Creates a `DynamicBody` with `locate=NurbsLocator(surf,uv_bounds...)`.
 """
 DynamicBody(surf,uv_bounds::Tuple;dist=dis,step=1,t⁰=0.,T=Float64,mem=Array) =
-    adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,T,mem);dist,T))
+    adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,mem);dist,T))
 
 Adapt.adapt_structure(to, x::DynamicBody{T,F,L,V,D}) where {T,F,L<:NurbsLocator,V,D} =
                       DynamicBody(x.surf,adapt(to,x.locate),x.velocity,x.scale,x.dist)
@@ -56,8 +57,8 @@ function surf_props(body::DynamicBody,ξ,t)
     uv = body.locate(ξ,t)
 
     # Get normal direction and vector from surf to ξ
-    n = norm_dir(body.surf,uv,t)
     p = ξ-body.surf(uv,t)
+    n = norm_dir(body.surf,uv,p,t)
 
     # Fix direction for C⁰ points, normalize, and get distance
     notC¹(body.locate,uv) && p'*p>0 && (n = p)
@@ -65,11 +66,40 @@ function surf_props(body::DynamicBody,ξ,t)
     return (body.dist(p,n),n,uv)
 end
 
+using LinearAlgebra: dot
+function norm_dir(nurbs::NurbsCurve{2},uv::Number,p::SVector{2},t)
+    s = ForwardDiff.derivative(uv->nurbs(uv,t),uv)
+    return SA[s[2],-s[1]]
+end
+function norm_dir(nurbs::NurbsCurve{3},uv::Number,p::SVector{3},t)
+    s = ForwardDiff.derivative(uv->nurbs(uv,t),uv); s/=√(s'*s)
+    return p-dot(p,s)*s
+end
+
+"""
+    ∮nds(p,body::DynamicBody,t=0)
+
+Surface normal pressure integral along the parametric curve(s)
+"""
+function ∮nds(p::AbstractArray{T},body::DynamicBody,t=0;N=64) where T
+    open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
+    integrate(s->_pforce(body.surf,p,s,t,Val{open}()),body.surf,t,body.locate.lims;N)
+end
+"""
+    ∮τnds(u,body::DynamicBody,t=0)
+
+Surface normal pressure integral along the parametric curve(s)
+"""
+function ∮τnds(u::AbstractArray{T},body::DynamicBody,t=0;N=64) where T
+    open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
+    integrate(s->_vforce(body.surf,u,s,t,body.velocity(s,0),Val{open}()),body.surf,t,body.locate.lims;N)
+end
+
 """
     update
 """
 update!(body::DynamicBody{T,F,L,V},t) where {T,F,L<:NurbsLocator,V} = 
-    update!(body.locate,body.surf,t)
+        update!(body.locate,body.surf,t)
 function update!(body::DynamicBody{T,F,L,V},uⁿ::AbstractArray,Δt) where {T,F,L<:NurbsLocator,V}
     body.velocity.pnts .= (uⁿ.-copy(body.surf.pnts))./Δt
     body.surf.pnts .= uⁿ

@@ -30,7 +30,7 @@ Example:
     @test isapprox(sdf(body,SA[-.3,-.4],t),-0.5,rtol=1e-4) # inside hash
     @test isapprox(sdf(body,SA[-3.,-4.],t), 4.0,rtol=2e-2) # outside hash
 """
-struct HashedLocator{T,F<:Function,A<:AbstractArray{T,2}}
+struct HashedLocator{T,F<:Function,A<:AbstractArray{T,2}} <: AbstractLocator
     refine::F
     lims::NTuple{2,T}
     hash::A
