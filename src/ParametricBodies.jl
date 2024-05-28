@@ -3,6 +3,9 @@ module ParametricBodies
 using StaticArrays,ForwardDiff
 using Adapt,KernelAbstractions
 
+abstract type AbstractLocator end
+export AbstractLocator
+
 include("HashedLocators.jl")
 export HashedLocator, refine, mymod
 
@@ -36,22 +39,22 @@ Example:
     @test V ≈ SA[-4/5,-3/5]
 """
 abstract type AbstractParametricBody <: AbstractBody end
-struct ParametricBody{T,S<:Function,L<:Union{Function,HashedLocator},M<:Function} <: AbstractParametricBody
+struct ParametricBody{T,S<:Function,L<:Union{Function,AbstractLocator},M<:Function} <: AbstractParametricBody
     surf::S    #ξ = surf(uv,t)
     locate::L  #uv = locate(ξ,t)
     map::M     #ξ = map(x,t)
     scale::T   #|dx/dξ| = scale
 end
-using CUDA: @allowscalar
+using CUDA
 function ParametricBody(surf,locate;map=(x,t)->x,T=Float64)
     N = length(surf(zero(T),0.))
     # Check input functions
     x,t = zero(SVector{N,T}),T(0); ξ = map(x,t)
-    @allowscalar uv = locate(ξ,t); p = ξ-surf(uv,t)
+    @CUDA.allowscalar uv = locate(ξ,t); p = ξ-surf(uv,t)
     @assert isa(ξ,SVector{N,T}) "map is not type stable"
     @assert isa(uv,T) "locate is not type stable"
     @assert isa(p,SVector{N,T}) "surf is not type stable"
-  
+
     ParametricBody(surf,locate,map,T(get_scale(map,x)))
 end
 
@@ -127,6 +130,7 @@ function _gausslegendre(N,T)
     x,w = gausslegendre(N)
     convert.(T,x),convert.(T,w)
 end
+integrate(curve::Function,lims=(0.,1.)) = integrate(ξ->1.0,curve,0.0,lims;N=N)
 function integrate(f::Function,curve::Function,t,lims::NTuple{2,T};N=64) where T
     # integrate NURBS curve to compute integral
     uv_, w_ = _gausslegendre(N,T)

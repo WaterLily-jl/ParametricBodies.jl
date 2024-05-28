@@ -18,7 +18,7 @@ but can be very unstable for general parametric curves. This is mitigated by sup
 Creates NurbsLocator by sampling the curve and finding the bounding box. This box is expanded by the amount `buffer`. 
 The hash array is allocated to span the box with resolution `step` and initialized using `update!(::,curve,t⁰)`.
 """
-struct NurbsLocator{T,F<:Function,G<:Function,B<:AbstractVector{T}}
+struct NurbsLocator{T,F<:Function,G<:Function,B<:AbstractVector{T}} <: AbstractLocator
     refine::F
     surf::G
     lims::NTuple{2,T}
@@ -40,7 +40,7 @@ function NurbsLocator(curve::NurbsCurve{n},lims;t⁰=0,step=1,buffer=2,mem=Array
 
     # Allocate struct, and update
     l=adapt(mem,NurbsLocator{T,typeof(f),typeof(curve),typeof(lower)}(f,curve,lims,lower,upper,step))
-    update!(l,curve,t⁰)
+    update!(l,curve,t⁰); l # needs to return the locator
 end
 
 # if it's open, we need to check that we are not at the endpoints
@@ -51,8 +51,9 @@ notC¹(l::NurbsLocator,uv) = !(l.surf(first(l.lims),0)≈l.surf(last(l.lims),0))
 
 Updates `l` for `surf` at time `t` by searching through `samples` and refining.
 """
-update!(l::NurbsLocator,surf,t)=(_update!(get_backend(l.lower),64)(l,surf,t,ndrange=size(l.lower));l)
-@kernel function _update!(l::NurbsLocator{T},surf,@Const(t)) where T
+# update!(l::NurbsLocator,surf,t)=(_update!(get_backend(l.lower),64)(l,surf,t,ndrange=size(l.lower));l)
+# @kernel function _update!(l::NurbsLocator{T},surf,@Const(t)) where T
+function update!(l::NurbsLocator{T},surf,t) where T
     # update bounding box
     l.lower .= l.upper .= surf(zero(T),t)
     # the cps net in a convex hull of the curve
@@ -75,15 +76,16 @@ function (l::NurbsLocator{T})(x,t) where T
     # check if the point is in bounding box
     inside = all(x.>l.lower) && all(x.<l.upper)
     # if we are outside, this is sufficient
-    !inside && return T(0.5)
+    # !inside && return T(0.5)
 
     # Grid search for uv within bounds
     @inline dis2(uv) = (q=x-l.surf(uv,t); q'*q)
     uv = zero(T); d = dis2(uv)
-    for uvᵢ in range(l.lims...,64)
+    for uvᵢ in range(l.lims...,128)
         dᵢ = dis2(uvᵢ)
         dᵢ<d && (uv=uvᵢ; d=dᵢ)
     end
+    !inside && return uv
 
     # Otherwise, refine estimate with two Newton steps
     uv = l.refine(x,uv,t)
