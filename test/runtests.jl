@@ -21,7 +21,7 @@ using StaticArrays,Test
 
     # use mapping to double and move circle
     U=0.1; map(x,t)=(x-SA[U*t,0])/2
-    body = ParametricBody(surf,locate;map)
+    body = ParametricBody(surf,locate;map,T=Float64)
     d,n,V = measure(body,SA[4U,-2.1],4.)
     @test d ≈ 0.1
     @test n ≈ SA[0,-1]
@@ -51,14 +51,14 @@ end
 
     # use mapping to double, move and rotate circle
     U=0.1; map(x,t)=SA[cos(t) sin(t); -sin(t) cos(t)]*(x-SA[U*t,0])/2
-    body = ParametricBody((θ,t) -> SA[cos(θ),sin(θ)],(0.,2π);step=0.25,map)
+    body = ParametricBody((θ,t) -> SA[cos(θ),sin(θ)],(0.,2π);step=0.25,map,T=Float64)
     d,n,V = measure(body,SA[4U,-2.1],4.)
     @test d ≈ 0.1
     @test n ≈ SA[0,-1]
     @test V ≈ SA[2.1+U,0] # rotation from map ∝ r, not R
 
     # use mapping to limit the hash to positive quadrant
-    body = ParametricBody(surf,(0.,π/2);step=0.25,map=(x,t)->abs.(x))
+    body = ParametricBody(surf,(0.,π/2);step=0.25,map=(x,t)->abs.(x),T=Float64)
     d,n,V = measure(body,SA[-0.3,-0.4],0.)
     @test d ≈ -0.5
     @test isapprox(n,SA[-3/5,-4/5],rtol=1e-4)
@@ -67,9 +67,10 @@ end
 
 using LinearAlgebra,ForwardDiff,CUDA
 @testset "NurbsCurves.jl" begin
+    T = Float32
     # make a square
-    square = BSplineCurve(SA[5 5 0 -5 -5 -5  0  5 5
-                             0 5 5  5  0 -5 -5 -5 0],degree=1)
+    square = BSplineCurve(SA{T}[5 5 0 -5 -5 -5  0  5 5
+                                0 5 5  5  0 -5 -5 -5 0],degree=1)
     @test square(1f0,0) ≈ square(0f0,0) ≈ [5,0]
     @test square(.5f0,0) ≈ [-5,0]
 
@@ -95,8 +96,8 @@ using LinearAlgebra,ForwardDiff,CUDA
     @test [body.locate(SA_F32[5,s],0) for s ∈ (-2,-1,-0.1)]≈[0.95,0.975,0.9975]
 
     # NURBS test
-    cps = SA[5 5 0 -5 -5 -5  0  5 5
-             0 5 5  5  0 -5 -5 -5 0]
+    cps = SA{T}[5 5 0 -5 -5 -5  0  5 5
+                0 5 5  5  0 -5 -5 -5 0]
     weights = SA[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
     knots = SA[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1] # requires non-uniform knot and weights
     circle = NurbsCurve(cps,knots,weights)
@@ -127,11 +128,12 @@ using LinearAlgebra,ForwardDiff,CUDA
 end
 @testset "DynamicBody.jl" begin
     # define a curve
-    cps = SA[-1. 0. 1.
-              0. 0. 0.]
+    T = Float32
+    cps = SA{T}[-1 0 1
+                 0 0 0]
     cps_m = MMatrix(cps)
-    weights = SA[1.,1.,1.]
-    knots =   SA[0.,0.,0.,1.,1.,1.]
+    weights = SA{T}[1,1,1]
+    knots =   SA{T}[0,0,0,1,1,1]
 
     # make a nurbs curve
     nurbs = NurbsCurve(cps_m,knots,weights)
@@ -151,8 +153,8 @@ end
     @test all(measure(Body,[1,0.85],0) .≈ [1.85,[0.,1.],[0.,-1]])
     
     # same for B-Splines, define a curve
-    cps = SA[-1. 0. 1.
-              0. 0. 0.]
+    cps = SA{T}[-1 0 1
+                 0 0 0]
     cps_m = MMatrix(cps)
 
     # make a nurbs curve
@@ -178,8 +180,9 @@ end
         # make different types of bodies
         close_parametric_body = ParametricBody(NurbsCurve(cps,knots,weights),(0,1);T=T)
         close_dynamic_body = DynamicBody(NurbsCurve(cps,knots,weights),(0,1);T=T)
-        open_parametric_body = ParametricBody(BSplineCurve(copy(cps[:,1:end-3]);degree=2),(0,1);T=T)
-        open_dynamic_body = DynamicBody(BSplineCurve(copy(cps[:,1:end-3]);degree=2),(0,1);T=T)
+        ocps = MMatrix{2,6}(cps[:,1:6])
+        open_parametric_body = ParametricBody(BSplineCurve(ocps;degree=2),(0,1);T=T)
+        open_dynamic_body = DynamicBody(BSplineCurve(ocps;degree=2),(0,1);T=T)
 
         # dymmy pressure and velocity
         p = ones(T, 2L,2L); u = ones(T, 2L,2L,2);

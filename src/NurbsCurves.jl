@@ -15,8 +15,7 @@ struct NurbsCurve{n,d,A<:AbstractArray,V<:AbstractVector,W<:AbstractVector} <: F
     knots::V
     wgts::W
 end
-function NurbsCurve(pnts,knots,weights)
-    (dim,count),T = size(pnts),promote_type(eltype(pnts),Float32)
+function NurbsCurve(pnts::StaticArray{Tuple{dim,count},T},knots,weights) where {dim,count,T<:AbstractFloat}
     @assert count == length(weights) "Invalid NURBS: each control point should have a corresponding weights."
     @assert count < length(knots) "Invalid NURBS: the number of knots should be greater than the number of control points."
     degree = length(knots) - count - 1 # the one in the input is not used
@@ -33,8 +32,7 @@ Define a uniform B-spline curve.
 - `degree`: The degree of the B-spline curve
 Note: An open, uniform knot vector for a degree `degree` B-spline is constructed by default.
 """
-function BSplineCurve(pnts;degree=1)
-    (dim,count),T = size(pnts),promote_type(eltype(pnts),Float32)
+function BSplineCurve(pnts::StaticArray{Tuple{dim,count},T};degree=1) where {dim,count,T<:AbstractFloat}
     @assert degree <= count - 1 "Invalid B-Spline: the degree should be less than the number of control points minus 1."
     knots = SA{T}[[zeros(degree); collect(range(0, count-degree) / (count-degree)); ones(degree)]...]
     weights = SA{T}[ones(count)...]
@@ -83,15 +81,15 @@ function interpNurbs(pnts::SMatrix{D,n,T};p=n-1) where {D,n,T}
     @assert p <= n - 1 "Invalid interpolation: the degree should be less than the number of control points minus 1."    
     # construct the parameter and the knot vector
     s = _u(pnts)
-    knot = SA[[zeros(p+1); [sum(s[j:j+p-1])/p for j ∈ p-1:n-p]; ones(p+1)]...]
+    knot = SA{T}[[zeros(p+1); [sum(s[j:j+p-1])/p for j ∈ p-1:n-p]; ones(p+1)]...]
     # construct system and solve
-    A = zeros(n,n);
+    A = zeros(T,n,n);
     for i ∈ 1:n, k ∈ 1:n
         A[i,k] = ifelse(abs(i-k)≥p,0.0,ParametricBodies.Bd(knot,s[i],k,Val(p)))
     end
-    cpns = SMatrix{2,n}((A\pnts')') # bit ugly, but it works
+    cpns = SMatrix{2,n,T}((A\pnts')') # bit ugly, but it works
     # build NurbsCurve and return it
-    NurbsCurve(cpns,knot,ones(size(cpns,2)))
+    NurbsCurve(cpns,knot,ones(T,size(cpns,2)))
 end
 using LinearAlgebra: norm
 function _u(pnts::SMatrix{D,n,T}) where {D,n,T}

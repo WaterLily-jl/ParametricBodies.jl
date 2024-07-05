@@ -13,7 +13,7 @@ but can be very unstable for general parametric curves. This is mitigated by sup
 
 ----
 
-    NurbsLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
+    NurbsLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float32,mem=Array)
 
 Creates NurbsLocator by sampling the curve and finding the bounding box. This box is expanded by the amount `buffer`. 
 The hash array is allocated to span the box with resolution `step` and initialized using `update!(::,curve,t⁰)`.

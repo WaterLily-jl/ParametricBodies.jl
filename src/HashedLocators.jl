@@ -13,7 +13,7 @@ but can be very unstable for general parametric curves. This is mitigated by sup
 
 ----
 
-    HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
+    HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float32,mem=Array)
 
 Creates HashedLocator by sampling the curve and finding the bounding box. This box is expanded by the amount `buffer`. 
 The hash array is allocated to span the box with resolution `step` and initialized using `update!(::,curve,t⁰,samples)`.
@@ -39,7 +39,7 @@ struct HashedLocator{T,F<:Function,A<:AbstractArray{T,2}} <: AbstractLocator
 end
 Adapt.adapt_structure(to, x::HashedLocator) = HashedLocator(x.refine,x.lims,adapt(to,x.hash),x.lower,x.step)
 
-function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float64,mem=Array)
+function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float32,mem=Array)
     # Apply type and get refinement function
     lims,t⁰,step = T.(lims),T(t⁰),T(step)
     f = refine(curve,lims,curve(first(lims),t⁰)≈curve(last(lims),t⁰))

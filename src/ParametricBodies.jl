@@ -46,14 +46,14 @@ struct ParametricBody{T,S<:Function,L<:Union{Function,AbstractLocator},M<:Functi
     scale::T   #|dx/dξ| = scale
 end
 using CUDA
-function ParametricBody(surf,locate;map=(x,t)->x,T=Float64)
+function ParametricBody(surf,locate;map=(x,t)->x,T=Float32)
     N = length(surf(zero(T),0.))
     # Check input functions
     x,t = zero(SVector{N,T}),T(0); ξ = map(x,t)
     @CUDA.allowscalar uv = locate(ξ,t); p = ξ-surf(uv,t)
-    @assert isa(ξ,SVector{N,T}) "map is not type stable"
-    @assert isa(uv,T) "locate is not type stable"
-    @assert isa(p,SVector{N,T}) "surf is not type stable"
+    @assert isa(ξ,SVector{N,T}) "map type ≠ ParametricBody{T}"
+    @assert isa(uv,T) "locate type ≠ ParametricBody{T}"
+    @assert isa(p,SVector{N,T}) "surf type ≠ ParametricBody{T}"
 
     ParametricBody(surf,locate,map,T(get_scale(map,x)))
 end
@@ -114,7 +114,7 @@ Adapt.adapt_structure(to, x::ParametricBody{T,F,L}) where {T,F,L<:HashedLocator}
 
 Creates a `ParametricBody` with `locate=HashedLocator(surf,uv_bounds...)`.
 """
-ParametricBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float64,mem=Array,map=(x,t)->x) = 
+ParametricBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float32,mem=Array,map=(x,t)->x) = 
     adapt(mem,ParametricBody(surf,HashedLocator(surf,uv_bounds;step,t⁰,T,mem);map,T))
 
 update!(body::ParametricBody{T,F,L},t) where {T,F,L<:HashedLocator} = 

@@ -16,15 +16,15 @@ struct DynamicBody{T,S<:Function,L<:Union{Function,NurbsLocator},V<:Function,D<:
     scale::T   #|dx/dξ| = scale
     dist::D
 end
-function DynamicBody(surf,locate;dist=dis,T=Float64)
+function DynamicBody(surf,locate;dist=dis,T=Float32)
     # Check input functions
     N = length(locate.lower)
     x,t = zeros(SVector{N,T}),T(0);
     uv = locate(x,t); p = x-surf(uv,t)
-    @assert isa(uv,T) "locate is not type stable"
-    @assert isa(p,SVector{N,T}) "surf is not type stable"
-    @assert isa(dist(x,x),T) "dist is not type stable"
-    dsurf = copy(surf); dsurf.pnts .= 0.0 # zero velocity
+    @assert isa(uv,T) "locate type ≠ DynamicBody{T}"
+    @assert isa(p,SVector{N,T}) "surf type ≠ DynamicBody{T}"
+    @assert isa(dist(x,x),T) "dist type ≠ DynamicBody{T}"
+    dsurf = copy(surf); dsurf.pnts .= zero(T) # zero velocity
     DynamicBody(surf,locate,dsurf,T(1.0),dist)
 end
 """
@@ -32,7 +32,7 @@ end
 
 Creates a `DynamicBody` with `locate=NurbsLocator(surf,uv_bounds...)`.
 """
-DynamicBody(surf,uv_bounds::Tuple;dist=dis,step=1,t⁰=0.,T=Float64,mem=Array) =
+DynamicBody(surf,uv_bounds::Tuple;dist=dis,step=1,t⁰=0.,T=Float32,mem=Array) =
     adapt(mem,DynamicBody(surf,NurbsLocator(surf,uv_bounds;step,t⁰,mem);dist,T))
 
 Adapt.adapt_structure(to, x::DynamicBody{T,F,L,V,D}) where {T,F,L<:NurbsLocator,V,D} =
