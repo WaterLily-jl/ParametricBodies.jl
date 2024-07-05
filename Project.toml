@@ -1,7 +1,7 @@
 name = "ParametricBodies"
 uuid = "06905c2e-4b4a-4765-8bb9-c6b6b2b99b1d"
 authors = ["Gabriel Weymouth"]
-version = "1.0.0-DEV"
+version = "0.1.0"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -16,7 +16,11 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 WaterLily = "ed894a53-35f9-47f1-b17f-85db9237eebd"
 
 [compat]
-julia = "1"
+CUDA = "4.1.4,5"
+ForwardDiff = "^0.10.18"
+KernelAbstractions = "^0.9.1"
+StaticArrays = "^1.1.0"
+julia = "1.6"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
