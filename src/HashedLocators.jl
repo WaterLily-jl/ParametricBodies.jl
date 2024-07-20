@@ -1,3 +1,4 @@
+using Adapt,KernelAbstractions
 """
     HashedLocator
 
@@ -117,3 +118,20 @@ function (l::HashedLocator)(x,t)
     uv = l.refine(x,uv,t)
     return l.refine(x,uv,t)
 end
+
+"""
+    HashedBody(curve,lims;T,mem,map)
+
+Creates a `ParametericBody` with `locate=HashedLocator(curve,lims...)`.
+"""
+function HashedBody(curve,lims::Tuple;T=Float32,map=dmap,dis=ddis,kwargs...)
+    # Wrap in type safe functions (GPUs are picky)
+    wcurve(u::U,t::T) where {U,T} = SVector{2,promote_type(U,T)}(curve(u,t))
+    wmap(x::SVector{n,X},t::T) where {n,X,T} = SVector{n,promote_type(X,T)}(map(x,t))
+
+    locate = HashedLocator(wcurve,T.(lims);kwargs...)
+    ParametricBody(wcurve,locate;map=wmap,dis)
+end
+Adapt.adapt_structure(to, x::ParametricBody{T,L}) where {T,L<:HashedLocator} =
+    ParametricBody(x.surf,x.dotS,adapt(to,x.locate),x.map,x.scale,x.dis)
+update!(body::ParametricBody{T,L},t) where {T,L<:HashedLocator} = update!(body.locate,body.surf,T(t))
