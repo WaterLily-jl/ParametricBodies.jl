@@ -31,16 +31,18 @@ winding direction of the parametric curve.
 sdf(body::AbstractParametricBody,x,t) = surf_props(body,x,t)[1]
 
 """
-    ParametricBody{T::Real}(surf,locate,map=(x,t)->x,scale=|∇map|⁻¹) <: AbstractBody
+    ParametricBody{T::Real}(surf,locate) <: AbstractBody
 
-    - `surf(uv::T,t::T)::SVector{2,T}:` parametrically define curve
-    - `locate(ξ::SVector{2,T},t::T):` method to find nearest parameter `uv` to `ξ`
-    - `map(x::SVector{2,T},t::T)::SVector{2,T}:` mapping from `x` to `ξ`
-    - `scale::T`: distance scaling from `ξ` to `x`.
+    - `surf(u,t)` parametrically defined curve
+    - `dotS(u,t)=derivative(t->surf(u,t),t)` time derivative of curve 
+    - `locate(ξ,t)` method to find nearest parameter `u` to `ξ`
+    - `map(x,t)=x` mapping from `x` to `ξ`
+    - `scale=|∇map|⁻¹` distance scaling from `ξ` to `x`
+    - `dis(p,n)=p'*n` distance function of position `p=ξ-S` and normal `n`
 
-Explicitly defines a geometries by an unsteady parametric curve and optional coordinate `map`.
-The curve is currently limited to be 2D, and must wind counter-clockwise. Any distance scaling
-induced by the map needs to be uniform and `scale` is computed automatically unless supplied.
+Explicitly defines a geometry by an unsteady parametric curve. The curve is currently limited 
+to be univariate, and must wind counter-clockwise if closed. The optional `dotS`, `map`, and 
+`dis` functions allow for more general geometry embeddings.
 
 Example:
 
@@ -56,9 +58,9 @@ Example:
     @test V ≈ SA[-4/5,-3/5]
 """
 struct ParametricBody{T,L<:Function,S<:Function,dS<:Function,M<:Function,D<:Function} <: AbstractParametricBody
-    surf::S    #ξ = surf(uv,t)
+    surf::S    #ξ = surf(v,t)
     dotS::dS   #dξ/dt
-    locate::L  #uv = locate(ξ,t)
+    locate::L  #u = locate(ξ,t)
     map::M     #ξ = map(x,t)
     scale::T   #|dx/dξ| = scale
     dis::D     #d = dis(p,n)
@@ -66,28 +68,28 @@ end
 # Default functions
 import LinearAlgebra: det
 dmap(x,t) = x; ddis(p,n) = p'*n
-get_dotS(surf) = (uv,t)->ForwardDiff.derivative(t->surf(uv,t),t)
+get_dotS(surf) = (u,t)->ForwardDiff.derivative(t->surf(u,t),t)
 get_scale(map,x::SVector{D,T}) where {D,T} = (dξdx=ForwardDiff.jacobian(x->map(x,zero(T)),x); T(abs(det(dξdx))^(-1/D)))
 ParametricBody(surf,locate;map=dmap,dis=ddis,x₀=SA_F32[0,0],dotS=get_dotS(surf)) = ParametricBody(surf,dotS,locate,map,get_scale(map,x₀),dis)
 
 function surf_props(body::ParametricBody,x,t)
-    # Map x to ξ and locate nearest uv
+    # Map x to ξ and locate nearest u
     ξ = body.map(x,t)
-    uv = body.locate(ξ,t)
+    u = body.locate(ξ,t)
 
     # Get normal direction and vector from surf to ξ
-    n = norm_dir(body.surf,uv,t)
-    p = ξ-body.surf(uv,t)
+    n = norm_dir(body.surf,u,t)
+    p = ξ-body.surf(u,t)
 
     # Fix direction for C⁰ points, normalize, and get distance
-    notC¹(body.locate,uv) && p'*p>0 && (n = p)
+    notC¹(body.locate,u) && p'*p>0 && (n = p)
     n /=  √(n'*n)
-    return (body.scale*body.dis(p,n),n,body.dotS(uv,t))
+    return (body.scale*body.dis(p,n),n,body.dotS(u,t))
 end
-notC¹(::Function,uv) = false
+notC¹(::Function,u) = false
 
-function norm_dir(surf,uv::Number,t)
-    s = ForwardDiff.derivative(uv->surf(uv,t),uv)
+function norm_dir(surf,u::Number,t)
+    s = ForwardDiff.derivative(u->surf(u,t),u)
     return SA[s[2],-s[1]]
 end
 

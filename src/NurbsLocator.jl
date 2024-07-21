@@ -29,14 +29,15 @@ update!(l::NurbsLocator,curve,t) = l=NurbsLocator(curve,step=l.step;t) # just ma
 
 function notC¹(l::NurbsLocator{NurbsCurve{n,d}},uv) where {n,d}
     d==1 && return !any(uv.≈l.curve.knots) # straight line spline is not C¹ at any knot
+    # Assuming we don't have repeated knots, ends are the only remaining potential not C¹ locations
     low,high = first(l.curve.knots),last(l.curve.knots)
-    (uv≈low || uv≈high) ? !l.C¹end : false # only need to check end-knots for d≥2 spline
+    (uv≈low || uv≈high) ? !l.C¹end : false 
 end
 
 """
     (l::NurbsLocator)(x,t)
 
-Estimate the parameter value `uv⁺ = argmin_uv (x-curve(uv,t))²` for a NURBS by looping through the 
+Estimate the parameter value `u⁺ = argmin_u (x-curve(u,t))²` for a NURBS by looping through the 
 spline segments.
 """
 function (l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,degree} where {n,degree}
@@ -51,7 +52,7 @@ function (l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,degree} where {n,degree
         # if we are outside, this is sufficient
         q2>9l.step^2 && return q2,u
 
-        # otherwise refine
+        # otherwise refine twice
         u = l.refine(x,u,t)
         u = l.refine(x,u,t)
         dis2(u),u
@@ -74,7 +75,8 @@ end
 """
     DynamicNurbsBody(curve;kwargs...)
 
-Creates a `ParametricBodyBody` with `locate=NurbsLocator` and `dotS` defined by a second spline curve.
+Creates a `ParametricBody` with `locate=NurbsLocator`, mutable curve points,
+and `dotS` defined by a second spline curve.
 """
 function DynamicNurbsBody(curve::NurbsCurve;step=1,kwargs...)
     # Make a mutable version of the curve
