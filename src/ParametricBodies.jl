@@ -111,8 +111,10 @@ export NurbsLocator,DynamicNurbsBody,update!
 
 include("PlanarBodies.jl")
 export PlanarBody
-# include("Recipes.jl")
-# export f
+
+include("Recipes.jl")
+export f
+include("integrals.jl")
 
 # Backward compatibility for extensions
 if !isdefined(Base, :get_extension)
