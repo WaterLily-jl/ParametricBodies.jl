@@ -1,4 +1,4 @@
-using WaterLily,ParametricBodies
+using ParametricBodies
 using StaticArrays,Test
 
 @testset "ParametricBodies.jl" begin
@@ -10,8 +10,6 @@ using StaticArrays,Test
 
     n = ParametricBodies.norm_dir(body.surf,π/2,0)
     @test n/√(n'*n) ≈ SA[0,1]
-
-    # @test WaterLily.sdf(body,SA[-.3,-.4],2.) ≈ -0.5
     @test sdf(body,SA[-.3,-.4],2.) ≈ -0.5
 
     d,n,V = measure(body,SA[-.75,1],4.)
@@ -154,4 +152,25 @@ end
     body = PlanarBody(square;map=(x,t)->SA[2x[2],2x[3],2x[1]]) # test with NurbsLocator & map
     @test [measure(body,SA[0,8,2],0)...]≈[9/2-√3/2,[0,1,0],[0,0,0]] rtol=1e-6
     @test [measure(body,SA[3,2,2],0)...]≈[2-√3/2,[1,0,0],[0,0,0]] rtol=1e-6
+end
+
+using CUDA,WaterLily
+@testset "WaterLily" begin
+    function circle_sim(nurbslocate=true,mem=Array,T=Float32)
+        cps = SA{T}[5 5 0 -5 -5 -5  0  5 5
+                    0 5 5  5  0 -5 -5 -5 0]
+        weights = SA[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
+        knots = SA[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1]
+        circle = NurbsCurve(cps,knots,weights)
+        body = nurbslocate ? ParametricBody(circle) : HashedBody(circle,(0,1);T,mem)
+        return Simulation((8,8),(1,0),5;body,mem,T)
+    end
+    for nurbs in [true,false]
+        for mem in [CuArray,Array]
+            sim = circle_sim(nurbs,mem); d = sim.flow.σ |> Array
+            for I in CartesianIndices((4:6,3:7))
+                @test d[I]≈√sum(abs2,WaterLily.loc(0,I))-5 atol=1e-6
+            end
+        end
+    end
 end

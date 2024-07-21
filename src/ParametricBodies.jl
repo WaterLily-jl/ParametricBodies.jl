@@ -4,7 +4,7 @@ using StaticArrays,ForwardDiff
 import WaterLily: AbstractBody,measure,sdf,interp
 import WaterLily
 # Force loc to return Float32 SVector by default
-WaterLily.loc(i,I::CartesianIndex{N},T=Float32) where N = SVector{N,T}(I.I .- 1.5 .- 0.5 .* δ(i,I).I)
+WaterLily.loc(i,I::CartesianIndex{N},T=Float32) where N = SVector{N,T}(I.I .- 1.5 .- 0.5 .* WaterLily.δ(i,I).I)
 
 abstract type AbstractParametricBody <: AbstractBody end
 """
@@ -95,7 +95,7 @@ end
 
 # include("integrals.jl")
 
-export AbstractParametricBody,ParametricBody
+export AbstractParametricBody,ParametricBody,sdf,measure
 
 abstract type AbstractLocator <:Function end
 export AbstractLocator
@@ -107,7 +107,7 @@ include("NurbsCurves.jl")
 export NurbsCurve,BSplineCurve,interpNurbs
 
 include("NurbsLocator.jl")
-export NurbsLocator,DynamicNurbsBody, update!
+export NurbsLocator,DynamicNurbsBody,update!
 
 include("PlanarBodies.jl")
 export PlanarBody

@@ -47,7 +47,7 @@ function (l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,degree} where {n,degree
         u = 0.5f0(l.curve.knots[degree+s]+l.curve.knots[degree+s+1])
 
         # squared distance outside the bounding box
-        q2 = box(x,@view(l.curve.pnts[:,s:s+degree]))
+        q2 = box(x,l.curve.pnts,s,s+degree)
 
         # if we are outside, this is sufficient
         q2>9l.step^2 && return q2,u
@@ -65,15 +65,25 @@ function (l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,degree} where {n,degree
         d2ᵢ<d2 && (uv=uvᵢ; d2=d2ᵢ)
     end; uv
 end
-function box(x,pnts)
-    ex = extrema(pnts,dims=2)
-    low,high = SA[first.(ex)...],SA[last.(ex)...]
+function box(x,pnts,s,e)
+    low = high = pnts[:,s]
+    for j in s+1:e
+        pj = pnts[:,j]
+        low = min.(low,pj); high = max.(high,pj)
+    end
     c,p = 0.5f0(high+low),0.5f0(high-low)
     sum(abs2,max.(abs.(x-c)-p,0))
 end
 
 """
-    DynamicNurbsBody(curve;kwargs...)
+    ParametricBody(curve::NurbsCurve;kwargs...)
+
+Creates a `ParametricBody` with `locate=NurbsLocator`.
+"""
+ParametricBody(curve::NurbsCurve;step=1,kwargs...) = ParametricBody(curve,NurbsLocator(curve;step);kwargs...)
+
+"""
+    DynamicNurbsBody(curve::NurbsCurve;kwargs...)
 
 Creates a `ParametricBody` with `locate=NurbsLocator`, mutable curve points,
 and `dotS` defined by a second spline curve.
