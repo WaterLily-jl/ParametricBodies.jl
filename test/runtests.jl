@@ -165,8 +165,8 @@ using CUDA,WaterLily
         body = nurbslocate ? ParametricBody(circle) : HashedBody(circle,(0,1);T,mem)
         return Simulation((8,8),(1,0),5;body,mem,T)
     end
-    for nurbs in [true,false]
-        for mem in [CuArray,Array]
+    for mem in (CUDA.functional() ? [CuArray,Array] : [Array])
+        for nurbs in [true,false]
             sim = circle_sim(nurbs,mem); d = sim.flow.σ |> Array
             for I in CartesianIndices((4:6,3:7))
                 @test d[I]≈√sum(abs2,WaterLily.loc(0,I))-5 atol=1e-6
