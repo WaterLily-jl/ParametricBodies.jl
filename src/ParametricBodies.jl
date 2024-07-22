@@ -67,7 +67,7 @@ import LinearAlgebra: det
 dmap(x,t) = x; ddis(p,n) = p'*n
 get_dotS(surf) = (u,t)->ForwardDiff.derivative(t->surf(u,t),t)
 get_scale(map,x::SVector{D,T}) where {D,T} = (dξdx=ForwardDiff.jacobian(x->map(x,zero(T)),x); T(abs(det(dξdx))^(-1/D)))
-ParametricBody(surf,locate;map=dmap,dis=ddis,x₀=SA_F32[0,0],dotS=get_dotS(surf)) = ParametricBody(surf,dotS,locate,map,get_scale(map,x₀),dis)
+ParametricBody(surf,locate;map=dmap,dis=ddis,scale=get_scale(map,SA_F32[0,0]),dotS=get_dotS(surf)) = ParametricBody(surf,dotS,locate,map,scale,dis)
 
 function surf_props(body::ParametricBody,x,t)
     # Map x to ξ and locate nearest u

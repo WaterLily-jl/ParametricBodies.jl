@@ -19,7 +19,7 @@ using StaticArrays,Test
 
     # use mapping to double and move circle
     U=0.1; map(x,t)=(x-SA[U*t,0])/2
-    body = ParametricBody(surf,locate;map,x₀=SA_F64[0,0])
+    body = ParametricBody(surf,locate;map,scale=ParametricBodies.get_scale(map,SA_F64[0,0]))
     d,n,V = measure(body,SA[4U,-2.1],4.)
     @test d ≈ 0.1
     @test n ≈ SA[0,-1]
@@ -140,7 +140,27 @@ end
     @test [measure(body,SA[5,5],0)...]≈[4.9√2-5,[√2/2,√2/2],[1,1]] rtol=1e-6
     @test [measure(body,SA[0,0],0)...]≈[0.1√2-5,[-√2/2,-√2/2],[1,1]] rtol=1e-6
 end
-@testset "PlanarBodies.jl" begin
+@testset "ExtrudeBodies.jl" begin
+    T = Float32
+    cps = SA{T}[7 7 0 -7 -7 -7  0  7 7
+                0 7 7  7  0 -7 -7 -7 0]
+    weights = SA[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
+    knots = SA[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1] # requires non-uniform knot and weights
+    circle = NurbsCurve(cps,knots,weights)
+    
+    # Make a cylinder
+    map(x::SVector{3},t) = SA[x[2],x[3]]
+    cylinder = ParametricBody(circle;map,scale=1f0)
+
+    @test [measure(cylinder,SA[2,3,6],0)...] ≈ [√45-7,[0,3,6]./√45,[0,0,0]] atol=1e-4
+
+    # Make a sphere
+    map(x::SVector{3},t) = (r = √(x[2]^2+x[3]^2); SA[x[1],r])
+    sphere = ParametricBody(circle;map,scale=1f0)
+
+    @test [measure(sphere,SA[2,3,6],0)...] ≈ [0,[2,3,6]./7,[0,0,0]] atol=1e-4
+end
+@testset "RevolveBodies.jl" begin
     T = Float32
     # make a square plate
     square = BSplineCurve(SA{T}[5 5 0 -5 -5 -5  0  5 5
@@ -154,9 +174,7 @@ end
     @test [measure(body,SA[3,2,2],0)...]≈[2-√3/2,[1,0,0],[0,0,0]] rtol=1e-6
 end
 
-using CUDA,WaterLily
-# Force loc to return Float32 SVector by default
-WaterLily.loc(i,I::CartesianIndex{N},T=Float32) where N = SVector{N,T}(I.I .- 1.5 .- 0.5 .* WaterLily.δ(i,I).I)
+using CUDA,WaterLily # requires WaterLily v1.2.0+
 @testset "WaterLily" begin
     function circle_sim(nurbslocate=true,mem=Array,T=Float32)
         cps = SA{T}[5 5 0 -5 -5 -5  0  5 5
@@ -173,13 +191,13 @@ WaterLily.loc(i,I::CartesianIndex{N},T=Float32) where N = SVector{N,T}(I.I .- 1.
             for I in CartesianIndices((4:6,3:7))
                 @test d[I]≈√sum(abs2,WaterLily.loc(0,I))-5 atol=1e-6
             end
-            # if nurbs # update body requires WaterLily PR
-            #     dc = 1f0
-            #     sim.body = update(sim.body,sim.body.surf.pnts .+ dc,sim.flow.Δt[end])
-            #     measure_sdf!(sim.flow.σ,sim.body); d = sim.flow.σ |> Array
-            #     I = CartesianIndex(5,5)
-            #     @test d[I]≈√sum(abs2,WaterLily.loc(0,I) .- dc)-5 atol=1e-6
-            # end
+            if nurbs
+                dc = 1f0
+                sim.body = update(sim.body, sim.body.surf.pnts .+ dc, sim.flow.Δt[end])
+                measure_sdf!(sim.flow.σ,sim.body); d = sim.flow.σ |> Array
+                I = CartesianIndex(5,5)
+                @test d[I]≈√sum(abs2,WaterLily.loc(0,I) .- dc)-5 atol=1e-6
+            end
         end
     end
 end
