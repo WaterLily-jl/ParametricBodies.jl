@@ -136,7 +136,7 @@ end
     # Check DynamicNurbsBody
     body = DynamicNurbsBody(circle)    
     @test [measure(body,SA[5,5],0)...]≈[5√2-5,[√2/2,√2/2],[0,0]] rtol=1e-6
-    update!(body,cps.+0.1,0.1)
+    body = update(body,cps.+T(0.1),T(0.1))
     @test [measure(body,SA[5,5],0)...]≈[4.9√2-5,[√2/2,√2/2],[1,1]] rtol=1e-6
     @test [measure(body,SA[0,0],0)...]≈[0.1√2-5,[-√2/2,-√2/2],[1,1]] rtol=1e-6
 end
@@ -155,6 +155,8 @@ end
 end
 
 using CUDA,WaterLily
+# Force loc to return Float32 SVector by default
+WaterLily.loc(i,I::CartesianIndex{N},T=Float32) where N = SVector{N,T}(I.I .- 1.5 .- 0.5 .* WaterLily.δ(i,I).I)
 @testset "WaterLily" begin
     function circle_sim(nurbslocate=true,mem=Array,T=Float32)
         cps = SA{T}[5 5 0 -5 -5 -5  0  5 5
@@ -162,7 +164,7 @@ using CUDA,WaterLily
         weights = SA[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
         knots = SA[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1]
         circle = NurbsCurve(cps,knots,weights)
-        body = nurbslocate ? ParametricBody(circle) : HashedBody(circle,(0,1);T,mem)
+        body = nurbslocate ? DynamicNurbsBody(circle) : HashedBody(circle,(0,1);T,mem)
         return Simulation((8,8),(1,0),5;body,mem,T)
     end
     for mem in (CUDA.functional() ? [CuArray,Array] : [Array])
@@ -171,6 +173,13 @@ using CUDA,WaterLily
             for I in CartesianIndices((4:6,3:7))
                 @test d[I]≈√sum(abs2,WaterLily.loc(0,I))-5 atol=1e-6
             end
+            # if nurbs # update body requires WaterLily PR
+            #     dc = 1f0
+            #     sim.body = update(sim.body,sim.body.surf.pnts .+ dc,sim.flow.Δt[end])
+            #     measure_sdf!(sim.flow.σ,sim.body); d = sim.flow.σ |> Array
+            #     I = CartesianIndex(5,5)
+            #     @test d[I]≈√sum(abs2,WaterLily.loc(0,I) .- dc)-5 atol=1e-6
+            # end
         end
     end
 end

@@ -41,7 +41,6 @@ Estimate the parameter value `u⁺ = argmin_u (x-curve(u,t))²` for a NURBS by l
 spline segments.
 """
 function (l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,degree} where {n,degree}
-    @inline dis2(uv) = sum(abs2,x-l.curve(uv,t))
     function check_segment(s)
         # uv at center of segment
         u = 0.5f0(l.curve.knots[degree+s]+l.curve.knots[degree+s+1])
@@ -55,7 +54,7 @@ function (l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,degree} where {n,degree
         # otherwise refine twice
         u = l.refine(x,u,t)
         u = l.refine(x,u,t)
-        dis2(u),u
+        sum(abs2,x-l.curve(u,t)),u
     end
 
     # Return uv of closest segment
@@ -85,20 +84,17 @@ ParametricBody(curve::NurbsCurve;step=1,kwargs...) = ParametricBody(curve,NurbsL
 """
     DynamicNurbsBody(curve::NurbsCurve;kwargs...)
 
-Creates a `ParametricBody` with `locate=NurbsLocator`, mutable curve points,
-and `dotS` defined by a second spline curve.
+Creates a `ParametricBody` with `locate=NurbsLocator`, and `dotS` defined by a second spline curve.
 """
 function DynamicNurbsBody(curve::NurbsCurve;step=1,kwargs...)
-    # Make a mutable version of the curve
-    mcurve = NurbsCurve(MMatrix(curve.pnts),curve.knots,curve.wgts)
-    # Make a velocity curve (init with 0)
-    dotS = copy(mcurve); dotS.pnts .= 0 
+    # Make a zero velocity spline
+    dotS = NurbsCurve(zeros(typeof(curve.pnts)),curve.knots,curve.wgts)
     # Make body
-    ParametricBody(mcurve,NurbsLocator(mcurve;step);dotS,kwargs...)
+    ParametricBody(curve,NurbsLocator(curve;step);dotS,kwargs...)
 end
-function update!(body::ParametricBody{T,L,S,dS},uⁿ::AbstractArray,vⁿ::AbstractArray) where {T,L<:NurbsLocator,S<:NurbsCurve,dS<:NurbsCurve}
-    body.surf.pnts .= uⁿ
-    body.dotS.pnts .= vⁿ
-    update!(body.locate,body.surf,0.0)
+function update(body::ParametricBody{T,L,S},uⁿ::AbstractArray{T},vⁿ::AbstractArray{T}) where {T,L<:NurbsLocator,S<:NurbsCurve}
+    surf = NurbsCurve(uⁿ,body.surf.knots,body.surf.wgts)
+    dotS = NurbsCurve(vⁿ,body.surf.knots,body.surf.wgts)
+    ParametricBody(surf,dotS,NurbsLocator(surf,step=body.locate.step),body.map,body.scale,body.dis)
 end
-update!(body::ParametricBody,uⁿ::AbstractArray,Δt) = update!(body,uⁿ,(uⁿ-copy(body.surf.pnts))/Δt)
+update(body::ParametricBody,uⁿ::AbstractArray,Δt) = update(body,uⁿ,(uⁿ-copy(body.surf.pnts))/Δt)
