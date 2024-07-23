@@ -57,7 +57,7 @@ function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float32,mem=Array)
     end
 
     # Allocate hash and struct, and update hash
-    hash = fill(first(lims),ceil.(Int,(upper-lower)/step .+ (1+2buffer))...) |> mem
+    hash = fill(first(lims),Int.((upper-lower) .÷ step .+ (1+2buffer))...) |> mem
     l=adapt(mem,HashedLocator{T,typeof(f),typeof(hash)}(f,lims,hash,lower.-buffer*step,step))
     update!(l,curve,t⁰,samples)
 end

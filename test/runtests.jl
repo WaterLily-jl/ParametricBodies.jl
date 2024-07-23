@@ -54,12 +54,21 @@ end
     @test n ≈ SA[0,-1]
     @test V ≈ SA[2.1+U,0] # rotation from map ∝ r, not R
 
-    # use mapping to limit the hash to positive quadrant
-    body = HashedBody(surf,(0.,π/2);step=0.25,map=(x,t)->abs.(x),T=Float64)
-    d,n,V = measure(body,SA[-0.3,-0.4],0.)
-    @test d ≈ -0.5
-    @test n ≈ SA[-3/5,-4/5] rtol=1e-4
-    @test V ≈ SA[4/5,-3/5] rtol=1e-4
+    # use map to model full circle with only the positive quadrant arc
+    step,buffer = 0.2,1
+    body = HashedBody(surf,(0.,π/2);step,buffer,map=(x,t)->abs.(x),T=Float64)
+    @test body.locate.lower ≈ step*buffer*[-1,-1]
+    @test size(body.locate.hash) == (1÷step+1+2buffer,1÷step+1+2buffer) # radius/step+5
+    @test [measure(body,SA[-0.3,-0.4],0.)...] ≈ [-0.5,[-3/5,-4/5],[4/5,-3/5]] rtol=1e-4
+
+    # use dis to model arc as body with finite thickness
+    thk = 0.1
+    body = HashedBody(surf,(0.,π/2);step,buffer,T=Float64,dis=(p,n)->√(p'*p)-thk)
+    # near the end works
+    x = SA[0.9,-0.1]; p = x-SA[1,0]; m = √(p'*p)
+    @test [measure(body,x,0.)...] ≈ [m-thk,p ./ m,[0,1]] rtol=1e-4
+    # but points inside the arc return "outside" normal!
+    @test measure(body,SA[0.4,0.3],0.)[2] ≈ [-4/5,-3/5] rtol=1e-4 broken=true
 end
 
 using LinearAlgebra,ForwardDiff
@@ -140,7 +149,7 @@ end
     @test [measure(body,SA[5,5],0)...]≈[4.9√2-5,[√2/2,√2/2],[1,1]] rtol=1e-6
     @test [measure(body,SA[0,0],0)...]≈[0.1√2-5,[-√2/2,-√2/2],[1,1]] rtol=1e-6
 end
-@testset "ExtrudeBodies.jl" begin
+@testset "Extruded Bodies" begin
     T = Float32
     cps = SA{T}[7 7 0 -7 -7 -7  0  7 7
                 0 7 7  7  0 -7 -7 -7 0]
@@ -151,16 +160,14 @@ end
     # Make a cylinder
     map(x::SVector{3},t) = SA[x[2],x[3]]
     cylinder = ParametricBody(circle;map,scale=1f0)
-
     @test [measure(cylinder,SA[2,3,6],0)...] ≈ [√45-7,[0,3,6]./√45,[0,0,0]] atol=1e-4
 
     # Make a sphere
     map(x::SVector{3},t) = (r = √(x[2]^2+x[3]^2); SA[x[1],r])
     sphere = ParametricBody(circle;map,scale=1f0)
-
     @test [measure(sphere,SA[2,3,6],0)...] ≈ [0,[2,3,6]./7,[0,0,0]] atol=1e-4
 end
-@testset "RevolveBodies.jl" begin
+@testset "PlanarBodies.jl" begin
     T = Float32
     # make a square plate
     square = BSplineCurve(SA{T}[5 5 0 -5 -5 -5  0  5 5
@@ -173,8 +180,7 @@ end
     @test [measure(body,SA[0,8,2],0)...]≈[9/2-√3/2,[0,1,0],[0,0,0]] rtol=1e-6
     @test [measure(body,SA[3,2,2],0)...]≈[2-√3/2,[1,0,0],[0,0,0]] rtol=1e-6
 end
-
-using CUDA,WaterLily # requires WaterLily v1.2.0+
+using CUDA,WaterLily
 @testset "WaterLily" begin
     function circle_sim(nurbslocate=true,mem=Array,T=Float32)
         cps = SA{T}[5 5 0 -5 -5 -5  0  5 5
@@ -191,7 +197,7 @@ using CUDA,WaterLily # requires WaterLily v1.2.0+
             for I in CartesianIndices((4:6,3:7))
                 @test d[I]≈√sum(abs2,WaterLily.loc(0,I))-5 atol=1e-6
             end
-            if nurbs
+            if nurbs # `sim.body=...` requires WaterLily 1.2.0+
                 dc = 1f0
                 sim.body = update(sim.body, sim.body.surf.pnts .+ dc, sim.flow.Δt[end])
                 measure_sdf!(sim.flow.σ,sim.body); d = sim.flow.σ |> Array
