@@ -11,7 +11,7 @@ using ParametricBodies
 
 A `ParametricBody` is a subtype of  `WaterLily.AbstractBody`, defining the `measure(body,x,t)` function needed to run WaterLily simulations.
 
-##### Parametric Bodies
+### Parametric Bodies
 
 A `ParametricBody` is defined using a parametric function repsentation of that shape. For example, a circle can be defined as
 ```julia
@@ -31,9 +31,9 @@ arc = ParametricBody(curve,locate,thk=0.1,boundary=false)
 ```
 All ParametricBodies defined by 3D curves are space-curves since the normal isn't uniquely defined, but the `PlanarBody` type discussed below lets us define closed membranes in 3D.
 
-**Third**, the functions `curve`, and especially `locate` can be tricky to define for general curves. The next few sections discuss methods to simplify and automate the construction of these functions. 
+**Third**, the functions `curve` and especially `locate` can be tricky to define for general curves. The next few sections discuss methods to simplify and automate the construction of these functions. 
 
-##### Hashed Locator & Body
+### Hashed Locator & Body
 
 A `HashedLocator` struct has been defined to automate locating the closest point on a supplied 2D curve. 
 ```julia
@@ -47,7 +47,7 @@ body = HashedBody(curve,(0.,2π),step=0.25)
 ```
 This locator function samples the curve over the supplied parametric limits and uses a Newton root finding method to locate the parameter value. A 2D array of parameter data (a hash table) is used to supply a good initial guess to the Newton solver. This hash must be updated if the curve is time-varying, and must be stored in a GPU array when computing on the GPU. See the example folder. The `HashedLocator` is currently only available for 2D curves, although it can be used with mapping and `PlanarBodies`, to define bodies for 3D simulations, see below.
 
-##### NurbsCurve & Locator
+### NurbsCurve & Locator
 
 A NURBS (Non-Uniform Rational B-Spline) based `NurbsCurve` struct make both the definition and location process more simple, and extends to 3D space-curves. For example, given a matrix of 2D points `pnts` along a desired curve, we can define a body easily
 ```julia
@@ -69,12 +69,13 @@ circle = NurbsCurve(cps,knots,weights)
 torus = ParametricBody(circle,thk=1,boundary=false)
 ```
 
-##### Mappings & 3D surfaces
+### Mappings & 3D surfaces
 
 Like `WaterLily.AutoBodies`, the utility of `ParametricBodies` is greatly increased through an optional `map` function. 
 
 Primarily, mapping can be used to move, rotate and scale the body in the simulation. For example, let's place the arc-wing above in a simulation:
 ```julia
+using WaterLily
 function arc_sim(R = 32, α = π/10, U=1, Re=100)
     curve(θ,t) = SA[cos(θ),sin(θ)] # ξ-space: angle=0,center=0,radius=1
     Rotate = SA[cos(α) sin(α); -sin(α) cos(α)]
@@ -91,7 +92,7 @@ See the WaterLily repo, the video above, and the examples in the next section fo
 A secondary application of the mapping function for `ParametricBodies` is to map from a 3D x-space to a 2D ξ-space, effectively extruding a 2D parametric curve into a 3D surface. For example, we can make a cylinder or sphere starting from a 2D NURBS circle using
 ```julia
 # Make a cylinder
-map(x::SVector{3},t) = SA[x[2],x[3]] # extrude along x[1] direction
+map(x::SVector{3},t) = SA[x[2],x[3]] # extrude along x[1]-axis
 cylinder = ParametricBody(circle;map,scale=1f0)
 
 # Make a sphere
@@ -106,13 +107,13 @@ disk = PlanarBody(circle;map=(x,t)->SA[2x[2],2x[3],2x[1]])
 ```
 where the mapping has been used to scale and rotate the disk as well.
 
-##### Dynamic Bodies
+### Dynamic Bodies
 
 `ParametricBodies` have two ways to be dynamic: 
 1. A time-varying parametric curve
 2. A time-varying map
 
-There are many examples of time varying mappings in the WaterLily repo and the video above, so we'll focus on option 1. 
+and these methods can be used together. There are many examples of time varying mappings in the WaterLily repo and the video above, so we'll focus on option 1. 
 
 If `curve` depends explicitly on `t`, this will automatically be reflected in the position and velocity of the body in a simulation. For example, a spinning circle is easily acheived using
 ```julia
@@ -120,7 +121,7 @@ curve(θ,t) = SA[cos(θ+t),sin(θ+t)]
 locate(x::SVector{2},t) = atan(x[2],x[1])-t
 spinning_body = ParametricBody(curve,locate)
 ```
-If you are using a `HashedLocator` for a dynamic curve you will need to call `update!(body,t)` frequently (probably every time step of the simulation) so that the initial guess of the locator can be updated as the body moves.
+If you are using a `HashedLocator` for a dynamic curve you will need to call `update!(body,t)` frequently (probably every time step of the simulation) so that the initial guess of the locator reflects the correct position of the body.
 
 We supply a special function `DynamicNurbsBody` for dynamics NURBS which defines a second spline for the velocity. This function also requires calling `update!(body,...)`, but in this case, the control points for both the position and velocity are updated. Here's an example
 ```
