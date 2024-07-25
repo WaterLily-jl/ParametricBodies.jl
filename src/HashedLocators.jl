@@ -133,5 +133,5 @@ function HashedBody(curve,lims::Tuple;T=Float32,map=dmap,kwargs...)
     ParametricBody(wcurve,locate;map=wmap,kwargs...)
 end
 Adapt.adapt_structure(to, x::ParametricBody{T,L}) where {T,L<:HashedLocator} =
-    ParametricBody(x.curve,x.dotS,adapt(to,x.locate),x.map,x.scale,x.thk,x.signed)
+    ParametricBody(x.curve,x.dotS,adapt(to,x.locate),x.map,x.scale,x.thk,x.boundary)
 update!(body::ParametricBody{T,L},t) where {T,L<:HashedLocator} = update!(body.locate,body.curve,T(t))

@@ -35,11 +35,12 @@ sdf(body::AbstractParametricBody,x,t) = curve_props(body,x,t)[1]
     - `locate(ξ,t)` method to find nearest parameter `u` to `ξ`
     - `map(x,t)=x` mapping from `x` to `ξ`
     - `scale=|∇map|⁻¹` distance scaling from `ξ` to `x`
-    - `dis(p,n)=p'*n` distance function of position `p=ξ-S` and normal `n`
+    - `thk=0` thickness offset for the signed distance
+    - `boundary=true` if the curve represent a body boundary, not a space-curve
 
 Explicitly defines a geometry by an unsteady parametric curve. The curve is currently limited 
-to be univariate, and must wind counter-clockwise if closed. The optional `dotS`, `map`, and 
-`dis` functions allow for more general geometry embeddings.
+to be univariate, and must wind counter-clockwise if closed. The optional `dotS`, `map`, `scale`, 
+`thk` and `boundary` parameters allow for more general geometry embeddings.
 
 Example:
 
@@ -61,15 +62,15 @@ struct ParametricBody{T,L<:Function,S<:Function,dS<:Function,M<:Function} <: Abs
     map::M     #ξ = map(x,t)
     scale::T   #|dx/dξ| = scale
     thk::T     #thickness
-    signed::Bool 
+    boundary::Bool 
 end
 # Default functions
 import LinearAlgebra: det
 dmap(x,t) = x
 get_dotS(curve) = (u,t)->ForwardDiff.derivative(t->curve(u,t),t)
 get_scale(map,x::SVector{D,T}) where {D,T} = (dξdx=ForwardDiff.jacobian(x->map(x,zero(T)),x); T(abs(det(dξdx))^(-1/D)))
-ParametricBody(curve,locate;dotS=get_dotS(curve),thk=0f0,signed=true,map=dmap,x₀=SA_F32[0,0],
-    scale=get_scale(map,x₀),T=promote_type(typeof(thk),typeof(scale)),kwargs...) = ParametricBody(curve,dotS,locate,map,T(scale),T(thk),signed)
+ParametricBody(curve,locate;dotS=get_dotS(curve),thk=0f0,boundary=true,map=dmap,x₀=SA_F32[0,0],
+    scale=get_scale(map,x₀),T=promote_type(typeof(thk),typeof(scale)),kwargs...) = ParametricBody(curve,dotS,locate,map,T(scale),T(thk),boundary)
 
 function curve_props(body::ParametricBody,x,t)
     # Map x to ξ, locate nearest u, and get vector
@@ -78,7 +79,7 @@ function curve_props(body::ParametricBody,x,t)
     p = ξ-body.curve(u,t)
 
     # Get unit normal 
-    n = notC¹(body.locate,u) ? p : (s=tangent_dir(body.curve,u,t); body.signed ? norm_dir(s) : aligned_dir(p,s))
+    n = notC¹(body.locate,u) ? p : (s=tangent_dir(body.curve,u,t); body.boundary ? norm_dir(s) : aligned_dir(p,s))
     n /= √(eps(u)+n'*n)
 
     # Get scaled & thinkess adjusted distance and dot(S)
@@ -88,7 +89,7 @@ notC¹(::Function,u) = false
 
 tangent_dir(curve,u,t) = ForwardDiff.derivative(u->curve(u,t),u)
 aligned_dir(p,s) = (s = s/√(s'*s); p-(p'*s)*s)
-norm_dir(s::SVector{2}) = SA[s[2],-s[1]] # space curve can't be signed
+norm_dir(s::SVector{2}) = SA[s[2],-s[1]] # space curve can't be a boundary
 
 export AbstractParametricBody,ParametricBody,sdf,measure
 

@@ -34,7 +34,7 @@ using StaticArrays,Test
     # test space-curve with thk=0
     curve3(θ,t) = SA[cos(θ),sin(θ),0]
     locate3(x::SVector{3},t) = atan(x[2],x[1])
-    body3 = ParametricBody(curve3,locate3,signed=false)
+    body3 = ParametricBody(curve3,locate3,boundary=false)
     @test [measure(body3,SA[3.,4.,0.],0.)...]≈[4,[3/5,4/5,0],[0,0,0]]
     @test [measure(body3,SA[-.3,-.4,0.],0.)...]≈[0.5,[3/5,4/5,0],[0,0,0]]
     @test [measure(body3,SA[1.,0.,1.],0.)...]≈[1,[0,0,1],[0,0,0]]    
@@ -77,7 +77,7 @@ end
 
     # model arc as space-curve with finite thickness
     thk = 0.1
-    body = HashedBody(curve,(0.,π/2);step,buffer,T=Float64,thk,signed=false)
+    body = HashedBody(curve,(0.,π/2);step,buffer,T=Float64,thk,boundary=false)
     # near the end works
     x = SA[0.9,-0.1]; p = x-SA[1,0]; m = √(p'*p)
     @test [measure(body,x,0.)...] ≈ [m-thk,p ./ m,[0,1]] rtol=1e-4
@@ -168,7 +168,7 @@ end
                  0 5 5  5  0 -5 -5 -5 0
                  0 0 0  0  0  0  0  0 0]
     circle3 = NurbsCurve(cps3,knots,weights)
-    body3 = ParametricBody(circle3,signed=false)
+    body3 = ParametricBody(circle3,boundary=false)
     @test [measure(body3,SA[3.,4.,1.],0.)...]≈[1,[0,0,1],[0,0,0]]
 end
 @testset "Extruded Bodies" begin
