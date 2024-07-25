@@ -8,11 +8,11 @@ abstract type AbstractParametricBody <: AbstractBody end
     d,n,V = measure(body::AbstractParametricBody,x,t)
 
 Determine the geometric properties of the body at time `t` closest to 
-point `x`. Both `dot(surf)` and `dot(map)` contribute to `V` if defined.
+point `x`. Both `dot(curve)` and `dot(map)` contribute to `V` if defined.
 """
 function measure(body::AbstractParametricBody,x,t)
-    # Surf props and velocity in ξ-frame
-    d,n,dotS = surf_props(body,x,t)
+    # curve props and velocity in ξ-frame
+    d,n,dotS = curve_props(body,x,t)
     dξdt = dotS-ForwardDiff.derivative(t->body.map(x,t),t)
 
     # Convert to x-frame with dξ/dx⁻¹ (d has already been scaled)
@@ -22,16 +22,16 @@ end
 """
     d = sdf(body::AbstractParametricBody,x,t)
 
-Signed distance from `x` to closest point on `body.surf` at time `t`. Sign depends on the
+Signed distance from `x` to closest point on `body.curve` at time `t`. Sign depends on the
 winding direction of the parametric curve.
 """
-sdf(body::AbstractParametricBody,x,t) = surf_props(body,x,t)[1]
+sdf(body::AbstractParametricBody,x,t) = curve_props(body,x,t)[1]
 
 """
-    ParametricBody{T::Real}(surf,locate) <: AbstractBody
+    ParametricBody{T::Real}(curve,locate) <: AbstractBody
 
-    - `surf(u,t)` parametrically defined curve
-    - `dotS(u,t)=derivative(t->surf(u,t),t)` time derivative of curve 
+    - `curve(u,t)` parametrically defined curve
+    - `dotS(u,t)=derivative(t->curve(u,t),t)` time derivative of curve 
     - `locate(ξ,t)` method to find nearest parameter `u` to `ξ`
     - `map(x,t)=x` mapping from `x` to `ξ`
     - `scale=|∇map|⁻¹` distance scaling from `ξ` to `x`
@@ -43,11 +43,11 @@ to be univariate, and must wind counter-clockwise if closed. The optional `dotS`
 
 Example:
 
-    surf(θ,t) = SA[cos(θ+t),sin(θ+t)]
+    curve(θ,t) = SA[cos(θ+t),sin(θ+t)]
     locate(x::SVector{2},t) = atan(x[2],x[1])-t
-    body = ParametricBody(surf,locate)
+    body = ParametricBody(curve,locate)
 
-    @test body.surf(body.locate(SA[4.,3.],1),1) == SA[4/5,3/5]
+    @test body.curve(body.locate(SA[4.,3.],1),1) == SA[4/5,3/5]
 
     d,n,V = measure(body,SA[-.75,1],4.)
     @test d ≈ 0.25
@@ -55,7 +55,7 @@ Example:
     @test V ≈ SA[-4/5,-3/5]
 """
 struct ParametricBody{T,L<:Function,S<:Function,dS<:Function,M<:Function} <: AbstractParametricBody
-    surf::S    #ξ = surf(v,t)
+    curve::S    #ξ = curve(v,t)
     dotS::dS   #dξ/dt
     locate::L  #u = locate(ξ,t)
     map::M     #ξ = map(x,t)
@@ -66,19 +66,19 @@ end
 # Default functions
 import LinearAlgebra: det
 dmap(x,t) = x
-get_dotS(surf) = (u,t)->ForwardDiff.derivative(t->surf(u,t),t)
+get_dotS(curve) = (u,t)->ForwardDiff.derivative(t->curve(u,t),t)
 get_scale(map,x::SVector{D,T}) where {D,T} = (dξdx=ForwardDiff.jacobian(x->map(x,zero(T)),x); T(abs(det(dξdx))^(-1/D)))
-ParametricBody(surf,locate;dotS=get_dotS(surf),thk=0f0,signed=true,map=dmap,x₀=SA_F32[0,0],
-    scale=get_scale(map,x₀),T=promote_type(typeof(thk),typeof(scale)),kwargs...) = ParametricBody(surf,dotS,locate,map,T(scale),T(thk),signed)
+ParametricBody(curve,locate;dotS=get_dotS(curve),thk=0f0,signed=true,map=dmap,x₀=SA_F32[0,0],
+    scale=get_scale(map,x₀),T=promote_type(typeof(thk),typeof(scale)),kwargs...) = ParametricBody(curve,dotS,locate,map,T(scale),T(thk),signed)
 
-function surf_props(body::ParametricBody,x,t)
+function curve_props(body::ParametricBody,x,t)
     # Map x to ξ, locate nearest u, and get vector
     ξ = body.map(x,t)
     u = body.locate(ξ,t)
-    p = ξ-body.surf(u,t)
+    p = ξ-body.curve(u,t)
 
     # Get unit normal 
-    n = notC¹(body.locate,u) ? p : (s=tangent_dir(body.surf,u,t); body.signed ? norm_dir(s) : aligned_dir(p,s))
+    n = notC¹(body.locate,u) ? p : (s=tangent_dir(body.curve,u,t); body.signed ? norm_dir(s) : aligned_dir(p,s))
     n /= √(eps(u)+n'*n)
 
     # Get scaled & thinkess adjusted distance and dot(S)

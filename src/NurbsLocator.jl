@@ -93,8 +93,8 @@ function DynamicNurbsBody(curve::NurbsCurve;step=1,kwargs...)
     ParametricBody(curve,NurbsLocator(curve;step);dotS,kwargs...)
 end
 function update!(body::ParametricBody{T,L,S},uⁿ::AbstractArray{T},vⁿ::AbstractArray{T}) where {T,L<:NurbsLocator,S<:NurbsCurve}
-    surf = NurbsCurve(uⁿ,body.surf.knots,body.surf.wgts)
-    dotS = NurbsCurve(vⁿ,body.surf.knots,body.surf.wgts)
-    ParametricBody(surf,dotS,NurbsLocator(surf,step=body.locate.step),body.map,body.scale,body.thk,body.signed)
+    curve = NurbsCurve(uⁿ,body.curve.knots,body.curve.wgts)
+    dotS = NurbsCurve(vⁿ,body.curve.knots,body.curve.wgts)
+    ParametricBody(curve,dotS,NurbsLocator(curve,step=body.locate.step),body.map,body.scale,body.thk,body.signed)
 end
-update!(body::ParametricBody,uⁿ::AbstractArray,Δt) = update!(body,uⁿ,(uⁿ-copy(body.surf.pnts))/Δt)
+update!(body::ParametricBody,uⁿ::AbstractArray,Δt) = update!(body,uⁿ,(uⁿ-copy(body.curve.pnts))/Δt)

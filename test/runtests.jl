@@ -2,13 +2,13 @@ using ParametricBodies
 using StaticArrays,Test
 
 @testset "ParametricBodies.jl" begin
-    surf(θ,t) = SA[cos(θ+t),sin(θ+t)]
+    curve(θ,t) = SA[cos(θ+t),sin(θ+t)]
     locate(x::SVector{2},t) = atan(x[2],x[1])-t
-    body = ParametricBody(surf,locate)
+    body = ParametricBody(curve,locate)
 
-    @test body.surf(body.locate(SA[4.,3.],1),1) == SA[4/5,3/5]
+    @test body.curve(body.locate(SA[4.,3.],1),1) == SA[4/5,3/5]
 
-    s = ParametricBodies.tangent_dir(body.surf,π/2,0)
+    s = ParametricBodies.tangent_dir(body.curve,π/2,0)
     @test s/√(s'*s) ≈ SA[-1,0]
     n = ParametricBodies.norm_dir(s)
     @test n/√(n'*n) ≈ SA[0,1]
@@ -25,7 +25,7 @@ using StaticArrays,Test
 
     # use mapping to double and move circle
     U=0.1; map(x,t)=(x-SA[U*t,0])/2
-    body = ParametricBody(surf,locate;map,x₀=SA_F64[0,0])
+    body = ParametricBody(curve,locate;map,x₀=SA_F64[0,0])
     d,n,V = measure(body,SA[4U,-2.1],4.)
     @test d ≈ 0.1
     @test n ≈ SA[0,-1]
@@ -41,17 +41,17 @@ using StaticArrays,Test
 end
 
 @testset "HashedLocators.jl" begin
-    surf(θ,t) = SA[cos(θ+t),sin(θ+t)]
-    locator = HashedLocator(surf,(0.,2π),T=Float32)
+    curve(θ,t) = SA[cos(θ+t),sin(θ+t)]
+    locator = HashedLocator(curve,(0.,2π),T=Float32)
     @test typeof(locator(SA_F32[0,1],0.f0))==Float32
 
     t = 0.
-    locator = HashedLocator(surf,(0.,2π),t⁰=t,step=0.25,buffer=1)
+    locator = HashedLocator(curve,(0.,2π),t⁰=t,step=0.25,buffer=1)
     @test locator.lower ≈ SA[-1.25,-1.25] rtol=0.01
     @test locator(SA[.3,.4],t) ≈ atan(4,3) rtol=1e-4
-    @test surf(locator(SA[-1.2,.9],t),t) ≈ SA[-4/5,3/5] rtol=1e-4
+    @test curve(locator(SA[-1.2,.9],t),t) ≈ SA[-4/5,3/5] rtol=1e-4
 
-    body = ParametricBody(surf,locator)
+    body = ParametricBody(curve,locator)
     @test sdf(body,SA[-3.,-4.],t) ≈ 4. rtol=1.5e-2 # outside hash
 
     t = 0.5; ParametricBodies.update!(body,t)
@@ -70,14 +70,14 @@ end
 
     # use map to model full circle with only the positive quadrant arc
     step,buffer = 0.2,1
-    body = HashedBody(surf,(0.,π/2);step,buffer,map=(x,t)->abs.(x),T=Float64)
+    body = HashedBody(curve,(0.,π/2);step,buffer,map=(x,t)->abs.(x),T=Float64)
     @test body.locate.lower ≈ step*buffer*[-1,-1]
     @test size(body.locate.hash) == (1÷step+1+2buffer,1÷step+1+2buffer) # radius/step+5
     @test [measure(body,SA[-0.3,-0.4],0.)...] ≈ [-0.5,[-3/5,-4/5],[4/5,-3/5]] rtol=1e-4
 
     # model arc as space-curve with finite thickness
     thk = 0.1
-    body = HashedBody(surf,(0.,π/2);step,buffer,T=Float64,thk,signed=false)
+    body = HashedBody(curve,(0.,π/2);step,buffer,T=Float64,thk,signed=false)
     # near the end works
     x = SA[0.9,-0.1]; p = x-SA[1,0]; m = √(p'*p)
     @test [measure(body,x,0.)...] ≈ [m-thk,p ./ m,[0,1]] rtol=1e-4
@@ -221,7 +221,7 @@ using CUDA,WaterLily
             end
             if nurbs # `sim.body=...` requires WaterLily 1.2.0+
                 dc = 1f0
-                sim.body = update!(sim.body, sim.body.surf.pnts .+ dc, sim.flow.Δt[end])
+                sim.body = update!(sim.body, sim.body.curve.pnts .+ dc, sim.flow.Δt[end])
                 measure_sdf!(sim.flow.σ,sim.body); d = sim.flow.σ |> Array
                 I = CartesianIndex(5,5)
                 @test d[I]≈√sum(abs2,WaterLily.loc(0,I) .- dc)-5 atol=1e-6
