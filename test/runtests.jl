@@ -8,10 +8,16 @@ using StaticArrays,Test
 
     @test body.surf(body.locate(SA[4.,3.],1),1) == SA[4/5,3/5]
 
-    n = ParametricBodies.norm_dir(body.surf,π/2,0)
+    s = ParametricBodies.tangent_dir(body.surf,π/2,0)
+    @test s/√(s'*s) ≈ SA[-1,0]
+    n = ParametricBodies.norm_dir(s)
     @test n/√(n'*n) ≈ SA[0,1]
-    @test sdf(body,SA[-.3,-.4],2.) ≈ -0.5
+    t = ParametricBodies.aligned_dir(SA[0.1,0.5],s) # points in direction n
+    @test t/√(t'*t) ≈ SA[0,1]
+    t = ParametricBodies.aligned_dir(SA[0.1,-0.5],s) # aligns with p to point down
+    @test t/√(t'*t) ≈ SA[0,-1]
 
+    @test sdf(body,SA[-.3,-.4],2.) ≈ -0.5
     d,n,V = measure(body,SA[-.75,1],4.)
     @test d ≈ 0.25
     @test n ≈ SA[-3/5, 4/5]
@@ -61,14 +67,14 @@ end
     @test size(body.locate.hash) == (1÷step+1+2buffer,1÷step+1+2buffer) # radius/step+5
     @test [measure(body,SA[-0.3,-0.4],0.)...] ≈ [-0.5,[-3/5,-4/5],[4/5,-3/5]] rtol=1e-4
 
-    # use dis to model arc as body with finite thickness
+    # model arc as space-curve with finite thickness
     thk = 0.1
-    body = HashedBody(surf,(0.,π/2);step,buffer,T=Float64,dis=(p,n)->√(p'*p)-thk)
+    body = HashedBody(surf,(0.,π/2);step,buffer,T=Float64,thk,signed=false)
     # near the end works
     x = SA[0.9,-0.1]; p = x-SA[1,0]; m = √(p'*p)
     @test [measure(body,x,0.)...] ≈ [m-thk,p ./ m,[0,1]] rtol=1e-4
     # but points inside the arc return "outside" normal!
-    @test measure(body,SA[0.4,0.3],0.)[2] ≈ [-4/5,-3/5] rtol=1e-4 broken=true
+    @test measure(body,SA[0.4,0.3],0.)[2] ≈ [-4/5,-3/5] rtol=1e-4
 end
 
 using LinearAlgebra,ForwardDiff
@@ -199,7 +205,7 @@ using CUDA,WaterLily
             end
             if nurbs # `sim.body=...` requires WaterLily 1.2.0+
                 dc = 1f0
-                sim.body = update(sim.body, sim.body.surf.pnts .+ dc, sim.flow.Δt[end])
+                sim.body = update!(sim.body, sim.body.surf.pnts .+ dc, sim.flow.Δt[end])
                 measure_sdf!(sim.flow.σ,sim.body); d = sim.flow.σ |> Array
                 I = CartesianIndex(5,5)
                 @test d[I]≈√sum(abs2,WaterLily.loc(0,I) .- dc)-5 atol=1e-6

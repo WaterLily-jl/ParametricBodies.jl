@@ -40,7 +40,7 @@ struct HashedLocator{T,F<:Function,A<:AbstractArray{T,2}} <: AbstractLocator
 end
 Adapt.adapt_structure(to, x::HashedLocator) = HashedLocator(x.refine,x.lims,adapt(to,x.hash),x.lower,x.step)
 
-function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float32,mem=Array)
+function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float32,mem=Array,kwargs...)
     # Apply type and get refinement function
     lims,t⁰,step = T.(lims),T(t⁰),T(step)
     f = refine(curve,lims,curve(first(lims),t⁰)≈curve(last(lims),t⁰))
@@ -124,14 +124,14 @@ end
 
 Creates a `ParametericBody` with `locate=HashedLocator(curve,lims...)`.
 """
-function HashedBody(curve,lims::Tuple;T=Float32,map=dmap,dis=ddis,kwargs...)
+function HashedBody(curve,lims::Tuple;T=Float32,map=dmap,kwargs...)
     # Wrap in type safe functions (GPUs are picky)
     wcurve(u::U,t::T) where {U,T} = SVector{2,promote_type(U,T)}(curve(u,t))
     wmap(x::SVector{n,X},t::T) where {n,X,T} = SVector{n,promote_type(X,T)}(map(x,t))
 
     locate = HashedLocator(wcurve,T.(lims);kwargs...)
-    ParametricBody(wcurve,locate;map=wmap,dis)
+    ParametricBody(wcurve,locate;map=wmap,kwargs...)
 end
 Adapt.adapt_structure(to, x::ParametricBody{T,L}) where {T,L<:HashedLocator} =
-    ParametricBody(x.surf,x.dotS,adapt(to,x.locate),x.map,x.scale,x.dis)
+    ParametricBody(x.surf,x.dotS,adapt(to,x.locate),x.map,x.scale,x.thk,x.signed)
 update!(body::ParametricBody{T,L},t) where {T,L<:HashedLocator} = update!(body.locate,body.surf,T(t))

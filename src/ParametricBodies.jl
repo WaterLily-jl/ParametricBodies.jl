@@ -54,41 +54,41 @@ Example:
     @test n ≈ SA[-3/5, 4/5]
     @test V ≈ SA[-4/5,-3/5]
 """
-struct ParametricBody{T,L<:Function,S<:Function,dS<:Function,M<:Function,D<:Function} <: AbstractParametricBody
+struct ParametricBody{T,L<:Function,S<:Function,dS<:Function,M<:Function} <: AbstractParametricBody
     surf::S    #ξ = surf(v,t)
     dotS::dS   #dξ/dt
     locate::L  #u = locate(ξ,t)
     map::M     #ξ = map(x,t)
     scale::T   #|dx/dξ| = scale
-    dis::D     #d = dis(p,n)
+    thk::T     #thickness
+    signed::Bool 
 end
 # Default functions
 import LinearAlgebra: det
-dmap(x,t) = x; ddis(p,n) = p'*n
+dmap(x,t) = x
 get_dotS(surf) = (u,t)->ForwardDiff.derivative(t->surf(u,t),t)
 get_scale(map,x::SVector{D,T}) where {D,T} = (dξdx=ForwardDiff.jacobian(x->map(x,zero(T)),x); T(abs(det(dξdx))^(-1/D)))
-ParametricBody(surf,locate;map=dmap,dis=ddis,x₀=SA_F32[0,0],scale=get_scale(map,x₀),dotS=get_dotS(surf)) = ParametricBody(surf,dotS,locate,map,scale,dis)
+ParametricBody(surf,locate;dotS=get_dotS(surf),thk=0f0,signed=true,map=dmap,x₀=SA_F32[0,0],
+    scale=get_scale(map,x₀),T=promote_type(typeof(thk),typeof(scale)),kwargs...) = ParametricBody(surf,dotS,locate,map,T(scale),T(thk),signed)
 
 function surf_props(body::ParametricBody,x,t)
-    # Map x to ξ and locate nearest u
+    # Map x to ξ, locate nearest u, and get vector
     ξ = body.map(x,t)
     u = body.locate(ξ,t)
-
-    # Get normal direction and vector from surf to ξ
-    n = norm_dir(body.surf,u,t)
     p = ξ-body.surf(u,t)
 
-    # Fix direction for C⁰ points, normalize, and get distance
-    notC¹(body.locate,u) && p'*p>0 && (n = p)
-    n /=  √(n'*n)
-    return (body.scale*body.dis(p,n),n,body.dotS(u,t))
+    # Get unit normal 
+    n = notC¹(body.locate,u) ? p : (s=tangent_dir(body.surf,u,t); body.signed ? norm_dir(s) : aligned_dir(p,s))
+    n /= √(eps(u)+n'*n)
+
+    # Get scaled & thinkess adjusted distance and dot(S)
+    return (body.scale*p'*n-body.thk,n,body.dotS(u,t))
 end
 notC¹(::Function,u) = false
 
-function norm_dir(surf,u::Number,t)
-    s = ForwardDiff.derivative(u->surf(u,t),u)
-    return SA[s[2],-s[1]]
-end
+tangent_dir(curve,u,t) = ForwardDiff.derivative(u->curve(u,t),u)
+aligned_dir(p,s) = (s = s/√(s'*s); p-(p'*s)*s)
+norm_dir(s::SVector{2}) = SA[s[2],-s[1]] # space curve can't be signed
 
 export AbstractParametricBody,ParametricBody,sdf,measure
 
@@ -102,7 +102,7 @@ include("NurbsCurves.jl")
 export NurbsCurve,BSplineCurve,interpNurbs
 
 include("NurbsLocator.jl")
-export NurbsLocator,DynamicNurbsBody,update
+export NurbsLocator,DynamicNurbsBody
 
 include("PlanarBodies.jl")
 export PlanarBody
