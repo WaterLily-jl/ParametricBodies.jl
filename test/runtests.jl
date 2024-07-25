@@ -30,6 +30,14 @@ using StaticArrays,Test
     @test d ≈ 0.1
     @test n ≈ SA[0,-1]
     @test V ≈ SA[2+U,0]
+
+    # test space-curve with thk=0
+    curve3(θ,t) = SA[cos(θ),sin(θ),0]
+    locate3(x::SVector{3},t) = atan(x[2],x[1])
+    body3 = ParametricBody(curve3,locate3,signed=false)
+    @test [measure(body3,SA[3.,4.,0.],0.)...]≈[4,[3/5,4/5,0],[0,0,0]]
+    @test [measure(body3,SA[-.3,-.4,0.],0.)...]≈[0.5,[3/5,4/5,0],[0,0,0]]
+    @test [measure(body3,SA[1.,0.,1.],0.)...]≈[1,[0,0,1],[0,0,0]]    
 end
 
 @testset "HashedLocators.jl" begin
@@ -151,9 +159,17 @@ end
     # Check DynamicNurbsBody
     body = DynamicNurbsBody(circle)    
     @test [measure(body,SA[5,5],0)...]≈[5√2-5,[√2/2,√2/2],[0,0]] rtol=1e-6
-    body = update(body,cps.+T(0.1),T(0.1))
+    body = update!(body,cps.+T(0.1),T(0.1))
     @test [measure(body,SA[5,5],0)...]≈[4.9√2-5,[√2/2,√2/2],[1,1]] rtol=1e-6
     @test [measure(body,SA[0,0],0)...]≈[0.1√2-5,[-√2/2,-√2/2],[1,1]] rtol=1e-6
+
+    # define a 3D circle
+    cps3 = SA{T}[5 5 0 -5 -5 -5  0  5 5
+                 0 5 5  5  0 -5 -5 -5 0
+                 0 0 0  0  0  0  0  0 0]
+    circle3 = NurbsCurve(cps3,knots,weights)
+    body3 = ParametricBody(circle3,signed=false)
+    @test [measure(body3,SA[3.,4.,1.],0.)...]≈[1,[0,0,1],[0,0,0]]
 end
 @testset "Extruded Bodies" begin
     T = Float32
