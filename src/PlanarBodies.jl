@@ -22,7 +22,7 @@ function PlanarBody(curve,lims::Tuple;T=Float32,map=dmap,thk=T(√3/2+1),kwargs.
     planform = ParametricBody(wcurve,locate)
     PlanarBody(planform,wmap,scale,thk)
 end
-Adapt.adapt_structure(to, x::PlanarBody) = PlanarBody(adapt(to,x.body),x.map,x.scale,x.thk)
+Adapt.adapt_structure(to, x::PlanarBody) = PlanarBody(adapt(to,x.planform),x.map,x.scale,x.thk)
 
 function PlanarBody(curve::NurbsCurve;map=dmap,T=eltype(curve.pnts),thk=T(√3/2+1))
     # Wrap in type safe function (GPUs are picky)
