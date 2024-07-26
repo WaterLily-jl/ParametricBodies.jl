@@ -8,15 +8,14 @@ using StaticArrays,Test
 
     @test body.curve(body.locate(SA[4.,3.],1),1) == SA[4/5,3/5]
 
-    s = ParametricBodies.tangent_dir(body.curve,π/2,0)
-    @test s/√(s'*s) ≈ SA[-1,0]
-    n = ParametricBodies.norm_dir(s)
-    @test n/√(n'*n) ≈ SA[0,1]
-    t = ParametricBodies.aligned_dir(SA[0.1,0.5],s) # points in direction n
-    @test t/√(t'*t) ≈ SA[0,1]
-    t = ParametricBodies.aligned_dir(SA[0.1,-0.5],s) # aligns with p to point down
-    @test t/√(t'*t) ≈ SA[0,-1]
-
+    s = ParametricBodies.tangent(body.curve,π/2,0)
+    @test s ≈ SA[-1,0]
+    @test ParametricBodies.aligned(SA[0.1,-0.5],s)
+    @test !ParametricBodies.aligned(SA[0.2,-0.5],s)
+    @test ParametricBodies.perp(s) ≈ SA[0,1]
+    @test ParametricBodies.align(SA[0.1, 0.5],s) ≈ SA[0, 1] # points in direction n
+    @test ParametricBodies.align(SA[0.1,-0.5],s) ≈ SA[0,-1] # aligns with p to point down
+    
     @test sdf(body,SA[-.3,-.4],2.) ≈ -0.5
     d,n,V = measure(body,SA[-.75,1],4.)
     @test d ≈ 0.25
@@ -174,7 +173,7 @@ end
     @test [measure(cylinder,SA[2,3,6],0)...] ≈ [√45-7,[0,3,6]./√45,[0,0,0]] atol=1e-4
 
     # Make a sphere
-    map(x::SVector{3},t) = (r = √(x[2]^2+x[3]^2); SA[x[1],r])
+    map(x::SVector{3},t) = SA[x[1],√(x[2]^2+x[3]^2)]
     sphere = ParametricBody(circle;map,scale=1f0)
     @test [measure(sphere,SA[2,3,6],0)...] ≈ [0,[2,3,6]./7,[0,0,0]] atol=1e-4
 end

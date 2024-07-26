@@ -79,17 +79,18 @@ function curve_props(body::ParametricBody,x,t)
     p = ξ-body.curve(u,t)
 
     # Get unit normal 
-    n = notC¹(body.locate,u) ? p : (s=tangent_dir(body.curve,u,t); body.boundary ? norm_dir(s) : aligned_dir(p,s))
-    n /= √(eps(u)+n'*n)
-
+    n = notC¹(body.locate,u) ? hat(p) : (s=tangent(body.curve,u,t); aligned(p,s) ? (body.boundary ? perp(s) : align(p,s)) : hat(p) )
+    
     # Get scaled & thinkess adjusted distance and dot(S)
     return (body.scale*p'*n-body.thk,n,body.dotS(u,t))
 end
 notC¹(::Function,u) = false
 
-tangent_dir(curve,u,t) = ForwardDiff.derivative(u->curve(u,t),u)
-aligned_dir(p,s) = (s = s/√(s'*s); p-(p'*s)*s)
-norm_dir(s::SVector{2}) = SA[s[2],-s[1]] # space curve can't be a boundary
+aligned(p,s) = (p'*s)^2 < max(1f-4,0.1p'*p)
+hat(p) = p/√(p'*p)
+tangent(curve,u,t) = hat(ForwardDiff.derivative(u->curve(u,t),u))
+align(p,s) = hat(p-(p'*s)*s)
+perp(s::SVector{2}) = SA[s[2],-s[1]]
 
 export AbstractParametricBody,ParametricBody,sdf,measure
 

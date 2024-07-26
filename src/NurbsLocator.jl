@@ -41,26 +41,23 @@ Estimate the parameter value `u⁺ = argmin_u (x-curve(u,t))²` for a NURBS by l
 spline segments.
 """
 function (l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,degree} where {n,degree}
-    function check_segment(s)
+    function locate_segment(s)
         # uv at center of segment
         u = 0.5f0(l.curve.knots[degree+s]+l.curve.knots[degree+s+1])
 
-        # squared distance outside the bounding box
-        q2 = box(x,l.curve.pnts,s,s+degree)
-
-        # if we are outside, this is sufficient
-        q2>9l.step^2 && return q2,u
+        # if well outside the bounding box, this is sufficient
+        box(x,l.curve.pnts,s,s+degree)>9l.step^2 && return u
 
         # otherwise refine twice
         u = l.refine(x,u,t)
-        u = l.refine(x,u,t)
-        sum(abs2,x-l.curve(u,t)),u
+        l.refine(x,u,t)
     end
+    @inline segment_props(i) = (u=locate_segment(i); (sum(abs2,x-l.curve(u,t)),u))
 
     # Return uv of closest segment
-    d2,uv = check_segment(1)
+    d2,uv = segment_props(1)
     for s ∈ 2:length(l.curve.wgts)-degree
-        d2ᵢ,uvᵢ = check_segment(s)
+        d2ᵢ,uvᵢ = segment_props(s)
         d2ᵢ<d2 && (uv=uvᵢ; d2=d2ᵢ)
     end; uv
 end
