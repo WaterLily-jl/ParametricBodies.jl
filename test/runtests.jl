@@ -78,14 +78,18 @@ end
     # model arc as space-curve with finite thickness
     thk = 0.1
     body = HashedBody(curve,(0.,π/2);step,buffer,T=Float64,thk,boundary=false)
-    # near the end works
-    x = SA[0.9,-0.1]; p = x-SA[1,0]; m = √(p'*p)
-    @test [measure(body,x,0.)...] ≈ [m-thk,p ./ m,[0,1]] rtol=1e-4
-    # but points inside the arc return "outside" normal!
+    @test [measure(body,SA[0.7,-0.4],0.)...] ≈ [0.4,[-3/5,-4/5],[0,1]] rtol=1e-4
     @test measure(body,SA[0.4,0.3],0.)[2] ≈ [-4/5,-3/5] rtol=1e-4
 end
 
 using LinearAlgebra,ForwardDiff
+function nurbs_circle(T,R=5)
+    cps = SA{T}[R R 0 -R -R -R  0  R R
+                0 R R  R  0 -R -R -R 0]
+    weights = SA[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
+    knots = SA[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1]
+    NurbsCurve(cps,knots,weights)
+end
 @testset "NurbsCurves.jl" begin
     T = Float32
     # make a square
@@ -116,13 +120,7 @@ using LinearAlgebra,ForwardDiff
     @test [body.locate(SA_F32[5,s],0) for s ∈ (-2,-1,-0.1)]≈[0.95,0.975,0.9975]
 
     # NURBS test
-    cps = SA{T}[5 5 0 -5 -5 -5  0  5 5
-                0 5 5  5  0 -5 -5 -5 0]
-    weights = SA[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
-    knots = SA[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1] # requires non-uniform knot and weights
-    circle = NurbsCurve(cps,knots,weights)
-
-    # Check bspline is type stable. Note that using Float64 for cps will break this!
+    circle = nurbs_circle(T)
     @test isa(circle(0.,0),SVector)
     @test all([eltype(circle(zero(T),0))==T for T in (Float32,Float64)])
 
@@ -143,11 +141,7 @@ end
 @testset "NurbsLocator.jl" begin
     # define a circle
     T = Float32
-    cps = SA{T}[5 5 0 -5 -5 -5  0  5 5
-                0 5 5  5  0 -5 -5 -5 0]
-    weights = SA[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
-    knots = SA[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1] # requires non-uniform knot and weights
-    circle = NurbsCurve(cps,knots,weights)
+    circle = nurbs_circle(T)
 
     # Check NurbsLocator
     locate = NurbsLocator(circle)
@@ -159,25 +153,20 @@ end
     # Check DynamicNurbsBody
     body = DynamicNurbsBody(circle)    
     @test [measure(body,SA[5,5],0)...]≈[5√2-5,[√2/2,√2/2],[0,0]] rtol=1e-6
-    body = update!(body,cps.+T(0.1),T(0.1))
+    body = update!(body, circle.pnts .+T(0.1), T(0.1))
     @test [measure(body,SA[5,5],0)...]≈[4.9√2-5,[√2/2,√2/2],[1,1]] rtol=1e-6
     @test [measure(body,SA[0,0],0)...]≈[0.1√2-5,[-√2/2,-√2/2],[1,1]] rtol=1e-6
 
-    # define a 3D circle
+    # define a 3D torus with minor radius=1
     cps3 = SA{T}[5 5 0 -5 -5 -5  0  5 5
                  0 5 5  5  0 -5 -5 -5 0
                  0 0 0  0  0  0  0  0 0]
-    circle3 = NurbsCurve(cps3,knots,weights)
-    body3 = ParametricBody(circle3,boundary=false)
-    @test [measure(body3,SA[3.,4.,1.],0.)...]≈[1,[0,0,1],[0,0,0]]
+    circle3 = NurbsCurve(cps3,circle.knots,circle.wgts)
+    body3 = ParametricBody(circle3,boundary=false,thk=1)
+    @test [measure(body3,SA[3.,4.,2.],0.)...]≈[1,[0,0,1],[0,0,0]]
 end
 @testset "Extruded Bodies" begin
-    T = Float32
-    cps = SA{T}[7 7 0 -7 -7 -7  0  7 7
-                0 7 7  7  0 -7 -7 -7 0]
-    weights = SA[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
-    knots = SA[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1] # requires non-uniform knot and weights
-    circle = NurbsCurve(cps,knots,weights)
+    circle = nurbs_circle(Float32,7)
     
     # Make a cylinder
     map(x::SVector{3},t) = SA[x[2],x[3]]
@@ -205,11 +194,7 @@ end
 using CUDA,WaterLily
 @testset "WaterLily" begin
     function circle_sim(nurbslocate=true,mem=Array,T=Float32)
-        cps = SA{T}[5 5 0 -5 -5 -5  0  5 5
-                    0 5 5  5  0 -5 -5 -5 0]
-        weights = SA[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.]
-        knots = SA[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1]
-        circle = NurbsCurve(cps,knots,weights)
+        circle = nurbs_circle(T)
         body = nurbslocate ? DynamicNurbsBody(circle) : HashedBody(circle,(0,1);T,mem)
         return Simulation((8,8),(1,0),5;body,mem,T)
     end
