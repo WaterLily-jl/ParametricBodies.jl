@@ -86,7 +86,7 @@ function curve_props(body::ParametricBody,x,t)
 end
 notC¹(::Function,u) = false
 
-aligned(p,s) = (p'*s)^2 < max(1f-4,0.1p'*p)
+aligned(p,s) = (p'*s)^2 < 1
 hat(p) = p/√(p'*p)
 tangent(curve,u,t) = hat(ForwardDiff.derivative(u->curve(u,t),u))
 align(p,s) = hat(p-(p'*s)*s)

@@ -33,7 +33,7 @@ function notC¹(l::NurbsLocator{NurbsCurve{n,d}},uv) where {n,d}
     low,high = first(l.curve.knots),last(l.curve.knots)
     (uv≈low || uv≈high) ? !l.C¹end : false 
 end
-
+include("Davidon.jl")
 """
     (l::NurbsLocator)(x,t)
 
@@ -41,25 +41,24 @@ Estimate the parameter value `u⁺ = argmin_u (x-curve(u,t))²` for a NURBS by l
 spline segments.
 """
 function (l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,degree} where {n,degree}
-    function locate_segment(s)
-        # uv at center of segment
-        u = 0.5f0(l.curve.knots[degree+s]+l.curve.knots[degree+s+1])
+    dis2(u) = sum(abs2,x-l.curve(u,t))
+    S = length(l.curve.wgts)-degree
+    uv(i) = 0.5f0(l.curve.knots[degree+1+i÷2]+l.curve.knots[degree+1+(i+1)÷2])
 
-        # if well outside the bounding box, this is sufficient
-        box(x,l.curve.pnts,s,s+degree)>9l.step^2 && return u
+    # Find closest segement
+    s,d2 = 1,dis2(uv(1))
+    for i in 2:2S-1
+        d2ᵢ = dis2(uv(i))
+        d2ᵢ<d2 && (d2=d2ᵢ; s=i)
+    end; u = uv(s)
 
-        # otherwise refine twice
-        u = l.refine(x,u,t)
-        l.refine(x,u,t)
-    end
-    @inline segment_props(i) = (u=locate_segment(i); (sum(abs2,x-l.curve(u,t)),u))
+    # If well outside the bounding box, this is sufficient
+    box(x,l.curve.pnts,(s+1)÷2,(s+1)÷2+degree)>9l.step^2 && return u
 
-    # Return uv of closest segment
-    d2,uv = segment_props(1)
-    for s ∈ 2:length(l.curve.wgts)-degree
-        d2ᵢ,uvᵢ = segment_props(s)
-        d2ᵢ<d2 && (uv=uvᵢ; d2=d2ᵢ)
-    end; uv
+    # Otherwise use Davidon
+    f = fdual(dis2,u); a = f(u)
+    b = f(uv(s-copysign(1,a.∂)))
+    _davidon(f,a,b,∂tol=l.step).x
 end
 function box(x,pnts,s,e)
     low = high = pnts[:,s]
