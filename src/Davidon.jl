@@ -5,15 +5,12 @@ function davidon(f,a::R,b::R;kwargs...) where R<:Real
 end
 function davidon(f,a,b;tol=√eps(a.x),∂tol=tol,verbose=false,itmx=1000)
     a.f>b.f && ((a,b)=(b,a)) # a is current minimizer
-    verbose && @show a,b
-    verbose && @show (a.x-b.x)/2tol,a.∂/∂tol
     for _ in 1:itmx
         (abs(a.x-b.x) ≤ 2tol || abs(a.∂) < ∂tol) && break
         u,v = inv_cubic(f,a,b;tol)
+        verbose && @show u,v
         (u,v)==(a,b) && break
         (a,b)=(u,v)
-        verbose && @show a,b
-        verbose && @show (a.x-b.x)/2tol,a.∂/∂tol
     end; a
 end
 using ForwardDiff: Dual,Tag,value,partials
