@@ -79,14 +79,13 @@ function curve_props(body::ParametricBody,x,t)
     p = ξ-body.curve(u,t)
 
     # Get unit normal 
-    n = notC¹(body.locate,u) ? hat(p) : (s=tangent(body.curve,u,t); aligned(p,s) ? (body.boundary ? perp(s) : align(p,s)) : hat(p) )
+    n = notC¹(body.locate,u) ? hat(p) : (s=tangent(body.curve,u,t); body.boundary ? perp(s) : align(p,s))
     
     # Get scaled & thinkess adjusted distance and dot(S)
     return (body.scale*p'*n-body.thk,n,body.dotS(u,t))
 end
 notC¹(::Function,u) = false
 
-aligned(p,s) = (p'*s)^2 < 1
 hat(p) = p/√(p'*p)
 tangent(curve,u,t) = hat(ForwardDiff.derivative(u->curve(u,t),u))
 align(p,s) = hat(p-(p'*s)*s)
