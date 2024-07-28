@@ -27,8 +27,8 @@ end
 
 update!(l::NurbsLocator,curve,t) = l=NurbsLocator(curve,step=l.step;t) # just make a new locator
 
-function notC¹(l::NurbsLocator{NurbsCurve{n,d}},uv) where {n,d}
-    d==1 && return !any(uv.≈l.curve.knots) # straight line spline is not C¹ at any knot
+function notC¹(l::NurbsLocator{C},uv) where C<:NurbsCurve{n,d} where {n,d}
+    d==1 && return any(uv.≈l.curve.knots) # straight line spline is not C¹ at any knot
     # Assuming we don't have repeated knots, ends are the only remaining potential not C¹ locations
     low,high = first(l.curve.knots),last(l.curve.knots)
     (uv≈low || uv≈high) ? !l.C¹end : false 
