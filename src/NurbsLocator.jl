@@ -40,36 +40,48 @@ include("Davidon.jl")
 Estimate the parameter value `u⁺ = argmin_u (x-curve(u,t))²` for a NURBS by looping through the 
 spline segments.
 """
-function (l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,degree} where {n,degree}
-    dis2(u) = sum(abs2,x-l.curve(u,t))
-    S = length(l.curve.wgts)-degree
-    uv(i) = 0.5f0(l.curve.knots[degree+1+i÷2]+l.curve.knots[degree+1+(i+1)÷2])
+(l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,d} where {n,d} = loc_nurbs(l,x,t,Val(d))
+function loc_nurbs(l,x,t,::Val{degree}) where degree
+    debug = false
+    debug && @show "C¹ NURBS locator"
 
-    # Find closest segement
-    s,d2 = 1,dis2(uv(1))
-    for i in 2:2S-1
-        d2ᵢ = dis2(uv(i))
-        d2ᵢ<d2 && (d2=d2ᵢ; s=i)
-    end; u = uv(s)
+    # location, Dual distance and Davidon kwargs
+    uv(i) = l.curve.knots[degree+i+1]
+    dis2 = fdual(u->sum(abs2,x-l.curve(u,t)),uv(0))
+    kwargs = (tol=1f-2(uv(1)),∂tol=l.step,itmx=degree+1,verbose=debug)
 
-    # If well outside the bounding box, this is sufficient
-    box(x,l.curve.pnts,(s+1)÷2,(s+1)÷2+degree)>9l.step^2 && return u
-
-    # Otherwise use Davidon
-    f = fdual(dis2,u); a = f(u)
-    b = f(uv(s-copysign(1,a.∂)))
-    _davidon(f,a,b,∂tol=l.step).x
+    # Locate closest segment
+    u = b = dis2(uv(0))
+    for i in 1:length(l.curve.wgts)-degree
+        a=b; b = dis2(uv(i))
+        debug && @show a,b
+        a==b && continue
+        uᵢ,vᵢ = inv_cubic(dis2,a,b) # quick check
+        debug && @show uᵢ,vᵢ
+        if uᵢ.f<2u.f # requires full search
+            uᵢ = davidon(dis2,uᵢ,vᵢ;kwargs...)
+            uᵢ.f<u.f && (u=uᵢ)
+        end
+    end; u.x # return best location
 end
-function box(x,pnts,s,e)
-    low = high = pnts[:,s]
-    for j in s+1:e
-        pj = pnts[:,j]
-        low = min.(low,pj); high = max.(high,pj)
-    end
-    c,p = 0.5f0(high+low),0.5f0(high-low)
-    sum(abs2,max.(abs.(x-c)-p,0))
-end
+function loc_nurbs(l,x,t,::Val{1})
+    debug = false
+    debug && @show "Linear NURBS locator"
 
+    # location & function value pair
+    uv(i) = 0.5f0(l.curve.knots[2+i÷2]+l.curve.knots[2+(i+1)÷2])
+    dis2(u) = (x=u,f=sum(abs2,x-l.curve(u,t)))
+
+    # Locate closest segment
+    u = c = dis2(uv(0))
+    for i in 1:length(l.curve.wgts)-1
+        a=c; b,c = dis2.(uv.((2i-1:2i)))
+        debug && @show a,b,c
+        uᵢ = inv_quad(dis2,a,b,c)
+        debug && @show uᵢ
+        uᵢ.f<u.f && (u=uᵢ)
+    end; u.x # Exact since d² is quadratic
+end
 """
     ParametricBody(curve::NurbsCurve;kwargs...)
 
