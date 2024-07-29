@@ -5,7 +5,7 @@ function make_sim(;L=32,Re=1e3,St=0.3,U=1,n=8,m=4,Λ=5,T=Float64,mem=Array)
     b = T(1/Λ); h₀=T(L÷4); ω=T(π*St*U/h₀)
     ellipse(θ,t) = 0.5f0L*SA[1+cos(θ),b*sin(θ)] # define parametric curve
     map(x,t) = x-SA[n*L÷4,m*L÷2-h₀*sin(ω*t)]
-    body = ParametricBody(ellipse,(0,2π);map,T,mem)  # automatically finds closest point
+    body = HashedBody(ellipse,(0,2π);T,map)  # automatically finds closest point
     # make a sim
     Simulation((n*L,m*L),(U,0),L;ν=U*L/Re,body,T,mem)
 end
@@ -16,9 +16,10 @@ include("viz.jl");
 sim = make_sim(;mem=Array,T=Float32)
 t₀ = round(sim_time(sim))
 duration = 1; tstep = 0.1
+p,ν = [],[]
 
 # run
-anim = @animate for tᵢ in range(t₀,t₀+duration;step=tstep)
+@gif for tᵢ in range(t₀,t₀+duration;step=tstep)
 
     # update until time tᵢ in the background
     sim_step!(sim,tᵢ,remeasure=true)
@@ -27,12 +28,11 @@ anim = @animate for tᵢ in range(t₀,t₀+duration;step=tstep)
     get_omega!(sim);
     plot_vorticity(sim.flow.σ, limit=10)
     plot!(sim.body,WaterLily.time(sim))
-    p = ParametricBodies.∮nds(sim.flow.p,sim.body)
-    ν = ParametricBodies.∮τnds(sim.flow.u,sim.body)
-    @show p,ν
+    push!(p,pressure_force(sim)[1])
+    push!(ν,viscous_force(sim)[1])
 
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
 end
-# save gif
-gif(anim, "/tmp/jl_sfawfg.gif", fps=24)
+plot(p,label="Pressure force")
+plot!(ν,label="Viscous force")

@@ -1,62 +1,75 @@
 using FastGaussQuadrature: gausslegendre
+function _gausslegendre(N,T)
+    x,w = gausslegendre(N)
+    convert.(T,x),convert.(T,w)
+end
 """
     integrate(f(uv),curve;N=64)
 
 integrate a function f(uv) along the curve
 """
-function _gausslegendre(N,T)
-    x,w = gausslegendre(N)
-    convert.(T,x),convert.(T,w)
-end
-integrate(curve::Function,lims=(0.,1.)) = integrate(ξ->1.0,curve,0.0,lims;N=N)
-function integrate(f::Function,curve::Function,t,lims::NTuple{2,T};N=64) where T
+integrate(crv::Function) = integrate(ξ->1.0,crv,0;N=N)
+function integrate(f::Function,crv::Function,t,lims;N=64)
     # integrate NURBS curve to compute integral
-    uv_, w_ = _gausslegendre(N,T)
+    uv_, w_ = _gausslegendre(N,typeof(first(lims)))
     # map onto the (uv) interval, need a weight scalling
-    scale=(lims[2]-lims[1])/2; uv_=scale*(uv_.+1); w_=scale*w_ 
-    sum([f(uv)*norm(ForwardDiff.derivative(uv->curve(uv,t),uv))*w for (uv,w) in zip(uv_,w_)])
+    scale=(last(lims)-first(lims))/2; uv_=scale*(uv_.+1); w_=scale*w_ 
+    sum([f(uv)*norm(ForwardDiff.derivative(uv->crv(uv,t),uv))*w for (uv,w) in zip(uv_,w_)])
 end
+import WaterLily: pressure_force,viscous_force,pressure_moment
 """
-    ∮nds(p,body::AbstractParametricBody,t=0)
+    pressure_force(p,df,body::AbstractParametricBody,t=0,T;N)
 
 Surface normal pressure integral along the parametric curve(s)
 """
-function ∮nds(p::AbstractArray{T},body::ParametricBody,t=0;N=64) where T
-    curve(ξ,τ) = -body.map(-body.surf(ξ,τ),τ)
-    open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
-    integrate(s->_pforce(curve,p,s,t,Val{open}()),curve,t,body.locate.lims;N)
+open(b::ParametricBody{T,L};t=0) where {T,L<:NurbsLocator} = Val{(!all(b.curve(first(b.curve.knots),t).≈b.curve(last(b.curve.knots),t)))}()
+open(b::ParametricBody{T,L};t=0) where {T,L<:HashedLocator} = Val{(all(b.curve(first(b.locate.lims),t).≈b.curve(last(b.locate.lims),t)))}()
+lims(b::ParametricBody{T,L};t=0) where {T,L<:NurbsLocator} = (first(b.curve.knots),last(b.curve.knots))
+lims(b::ParametricBody{T,L};t=0) where {T,L<:HashedLocator} = b.locate.lims
+function pressure_force(p,df,body::ParametricBody,t=0,T=promote_type(Float64,eltype(p));N=64)
+    curve(ξ,τ) = -body.map(-body.curve(ξ,τ),τ) # inverse maping
+    -one(T)*integrate(s->_pforce(curve,p,s,t,open(body)),curve,t,lims(body);N)
 end
 """
-    ∮τnds(u,body::AbstractParametricBody,t=0)
+    viscous_force(u,ν,df,body::AbstractParametricBody,t=0,T;N)
 
 Surface normal pressure integral along the parametric curve(s)
 """
-function ∮τnds(u::AbstractArray{T},body::ParametricBody,t=0;N=64) where T
-    curve(ξ,τ) = -body.map(-body.surf(ξ,τ),τ) # inverse maping
-    vel(ξ) = ForwardDiff.derivative(t->curve(ξ,t),t) # get velocity at coordinate ξ
-    open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
-    integrate(s->_vforce(curve,u,s,t,vel(s),Val{open}()),curve,t,body.locate.lims;N)
+function viscous_force(u,ν,df,body::ParametricBody,t=0,T=promote_type(Float64,eltype(u));N=64)
+    curve(ξ,τ) = -body.map(-body.curve(ξ,τ),τ) # inverse maping
+    ν*integrate(s->_vforce(curve,u,s,t,body.dotS(s,t),open(body)),curve,t,lims(body);N)
+end
+using LinearAlgebra: cross
+"""
+    pressure_moment(x₀,p,df,body::AbstractParametricBody,t=0,T;N)
+
+Surface normal pressure moment integral along the parametric curve(s)
+"""
+function pressure_moment(x₀,p,df,body::ParametricBody,t=0,T=promote_type(Float64,eltype(p));N=64)
+    curve(ξ,τ) = -body.map(-body.curve(ξ,τ),τ) # inverse maping
+    -one(T)*integrate(s->cross(curve(s,t)-x₀,_pforce(curve,p,s,t,open(body))),curve,t,lims(body);N)
 end
 
-# pressure force on a parametric `surf` (closed) at parametric coordinate `s` and time `t`.
-function _pforce(surf,p::AbstractArray{T},s::T,t,::Val{false},δ=1) where T
-    xᵢ = surf(s,t); nᵢ = norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
+perp(curve,u,t) = perp(tangent(curve,u,t))
+# pressure force on a parametric `curve` (closed) at parametric coordinate `s` and time `t`.
+function _pforce(crv,p::AbstractArray{T},s::T,t,::Val{false};δ=1) where T
+    xᵢ = crv(s,t); nᵢ = perp(crv,s,t); nᵢ /= √(nᵢ'*nᵢ)
     return interp(xᵢ+δ*nᵢ,p).*nᵢ
 end
-function _pforce(surf,p::AbstractArray{T},s::T,t,::Val{true},δ=1) where T
-    xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
+function _pforce(crv,p::AbstractArray{T},s::T,t,::Val{true};δ=1) where T
+    xᵢ = crv(s,t); nᵢ = ParametricBodies.perp(crv,s,t); nᵢ /= √(nᵢ'*nᵢ)
     return (interp(xᵢ+δ*nᵢ,p)-interp(xᵢ-δ*nᵢ,p))*nᵢ
 end
-# viscous force on a parametric `surf` (closed) at parametric coordinate `s` and time `t`.
-function _vforce(surf,u::AbstractArray{T},s::T,t,vᵢ,::Val{false},δ=1) where T
-    xᵢ = surf(s,t); nᵢ = norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
+# viscous force on a parametric `curve` (closed) at parametric coordinate `s` and time `t`.
+function _vforce(crv,u::AbstractArray{T},s::T,t,vᵢ,::Val{false};δ=1) where T
+    xᵢ = crv(s,t); nᵢ = perp(crv,s,t); nᵢ /= √(nᵢ'*nᵢ)
     vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ # tangential comp
     uᵢ = interp(xᵢ+δ*nᵢ,u)  # prop in the field
     uᵢ = uᵢ .- sum(uᵢ.*nᵢ)*nᵢ # tangential comp
     return (uᵢ.-vᵢ)./δ # FD
 end
-function _vforce(surf,u::AbstractArray{T,N},s::T,t,vᵢ,::Val{true},δ=1) where {T,N}
-    xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
+function _vforce(crv,u::AbstractArray{T,N},s::T,t,vᵢ,::Val{true};δ=1) where {T,N}
+    xᵢ = crv(s,t); nᵢ = perp(crv,s,t); nᵢ /= √(nᵢ'*nᵢ)
     τ = zeros(SVector{N-1,T})
     vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ
     for j ∈ [-1,1]
@@ -66,28 +79,3 @@ function _vforce(surf,u::AbstractArray{T,N},s::T,t,vᵢ,::Val{true},δ=1) where 
     end
     return τ
 end
-
-# using LinearAlgebra: dot
-# function norm_dir(nurbs::NurbsCurve{3},uv::Number,p::SVector{3},t)
-#     s = ForwardDiff.derivative(uv->nurbs(uv,t),uv); s/=√(s'*s)
-#     return p-dot(p,s)*s
-# end
-
-# """
-#     ∮nds(p,body::DynamicBody,t=0)
-
-# Surface normal pressure integral along the parametric curve(s)
-# """
-# function ∮nds(p::AbstractArray{T},body::DynamicBody,t=0;N=64) where T
-#     open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
-#     integrate(s->_pforce(body.surf,p,s,t,Val{open}()),body.surf,t,body.locate.lims;N)
-# end
-# """
-#     ∮τnds(u,body::DynamicBody,t=0)
-
-# Surface normal pressure integral along the parametric curve(s)
-# """
-# function ∮τnds(u::AbstractArray{T},body::DynamicBody,t=0;N=64) where T
-#     open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
-#     integrate(s->_vforce(body.surf,u,s,t,body.velocity(s,0),Val{open}()),body.surf,t,body.locate.lims;N)
-# end

@@ -4,19 +4,17 @@ using StaticArrays
 using CUDA
 using WriteVTK
 # parameters
-function dynamicSpline(;L=2^4,Re=250,U =1,ϵ=0.5,thk=2ϵ+√2,mem=Array)
+function dynamicSpline(;L=2^4,Re=250,U =1,ϵ=0.5,thk=2ϵ+√3,mem=Array)
     # define a flat plat at and angle of attack
     cps = SA[-1   0   1
              0.5 0.25 0
              0    0   0]*L .+ [2L,3L,8]
 
     # needed if control points are moved
-    cps_m = MMatrix(cps)
-    circle = BSplineCurve(cps_m;degree=2)
+    curve = BSplineCurve(cps;degree=2)
 
     # use BDIM-σ distance function, make a body and a Simulation
-    dist(p,n)=√(p'*p)-thk/2
-    body = DynamicBody(circle,(0,1);dist,mem)
+    body = DynamicNurbsBody(curve;thk=thk,boundary=false)
     Simulation((8L,6L,16),(U,0,0),L;U,ν=U*L/Re,body,T=Float64,mem)
 end
 
