@@ -34,7 +34,10 @@ using StaticArrays,Test
     body3 = ParametricBody(curve3,locate3,boundary=false)
     @test [measure(body3,SA[3.,4.,0.],0.)...]≈[4,[3/5,4/5,0],[0,0,0]]
     @test [measure(body3,SA[-.3,-.4,0.],0.)...]≈[0.5,[3/5,4/5,0],[0,0,0]]
-    @test [measure(body3,SA[1.,0.,1.],0.)...]≈[1,[0,0,1],[0,0,0]]    
+    @test [measure(body3,SA[1.,0.,1.],0.)...]≈[1,[0,0,1],[0,0,0]]
+    
+    # "fast" is ignored (without error) by custom locator
+    @test all(measure(body3,SA[1.,0.,1.],0.,fastd²=1) .≈ (1,[0,0,1],[0,0,0]))
 end
 
 @testset "HashedLocators.jl" begin
@@ -151,6 +154,14 @@ end
     @test locate([5,5],0) ≈ 1/8
     body = ParametricBody(circle,locate)
     @test [measure(body,SA[5,5],0)...]≈[5√2-5,[√2/2,√2/2],[0,0]] rtol=1e-6
+
+    # Test fast measure
+    @test locate.C≈[0,0]
+    @test locate.R≈[5,5]
+
+    @test [measure(body,SA[5,5],0,fastd²=2)...]≈[5√2-5,[0,0],[0,0]] rtol=1e-6 # inside BBox but outside d²
+    @test [measure(body,SA[6,8],0,fastd²=2)...]≈[√10,[0,0],[0,0]] rtol=1e-6   # outside BBox (bounded d²)
+    @test [measure(body,SA[6,0],0,fastd²=2)...]≈[1,[1,0],[0,0]] rtol=1e-6     # outside BBox but inside d²
 
     # Check DynamicNurbsBody
     body = DynamicNurbsBody(circle)    

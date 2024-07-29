@@ -2,18 +2,18 @@
     NurbsLocator
 
     - `curve<:NurbsCurve` NURBS defined curve
-    - `refine<:Function` Performs bounded Newton root-finding step
     - `step<:Real` buffer size around control points
     - `C¹end::Bool` check if the curve is closed and C¹
 
-NURBS-specific locator function. Defines local bounding boxes using the control point locations instead of a
-hash function. If point is within a section, Newton `refine`ment is used.
+NURBS-specific locator function. Loops through the spline sections, locating points accurately 
+(using inverse cubic interpolation) only if it's possible for that to be the closest section.
 """
-struct NurbsLocator{C<:NurbsCurve,F<:Function,T<:Number} <: AbstractLocator
+struct NurbsLocator{C<:NurbsCurve,T<:Number,S<:SVector} <: AbstractLocator
     curve::C
-    refine::F
     step::T
     C¹end::Bool
+    C::S
+    R::S
 end
 
 function NurbsLocator(curve::NurbsCurve;step=1,t=0.)
@@ -21,8 +21,10 @@ function NurbsLocator(curve::NurbsCurve;step=1,t=0.)
     low,high = first(curve.knots),last(curve.knots)
     c(u) = curve(u,t); dc(u) = ForwardDiff.derivative(c,u)
     C¹end = c(low)≈c(high) && dc(low)≈dc(high)
-    f = refine(curve,(low,high),C¹end)
-    NurbsLocator(curve,f,step,C¹end)
+    # Control-point bounding box 
+    ex = extrema(curve.pnts,dims=2)
+    low,high = SVector(first.(ex)),SVector(last.(ex))
+    NurbsLocator(curve,step,C¹end,0.5f0*(low+high),0.5f0(high-low))
 end
 
 update!(l::NurbsLocator,curve,t) = l=NurbsLocator(curve,step=l.step;t) # just make a new locator
@@ -40,7 +42,10 @@ include("Davidon.jl")
 Estimate the parameter value `u⁺ = argmin_u (x-curve(u,t))²` for a NURBS by looping through the 
 spline segments.
 """
-(l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,d} where {n,d} = loc_nurbs(l,x,t,Val(d))
+function (l::NurbsLocator{C})(x,t,fast=false) where C<:NurbsCurve{n,d} where {n,d}
+    fast && return √sum(abs2,max.(0,abs.(x-l.C)-l.R))
+    loc_nurbs(l,x,t,Val(d))
+end
 function loc_nurbs(l,x,t,::Val{degree}) where degree # C¹⁺ NURBS locator
     # location, Dual distance and Davidon kwargs
     uv(i) = l.curve.knots[degree+i+1]

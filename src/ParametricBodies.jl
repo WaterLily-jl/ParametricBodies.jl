@@ -10,9 +10,10 @@ abstract type AbstractParametricBody <: AbstractBody end
 Determine the geometric properties of the body at time `t` closest to 
 point `x`. Both `dot(curve)` and `dot(map)` contribute to `V` if defined.
 """
-function measure(body::AbstractParametricBody,x,t)
+function measure(body::AbstractParametricBody,x,t;fastd²=Inf)
     # curve props and velocity in ξ-frame
-    d,n,dotS = curve_props(body,x,t)
+    d,n,dotS = curve_props(body,x,t;fastd²)
+    d^2 > fastd² && return d,zero(x),zero(x)
     dξdt = dotS-ForwardDiff.derivative(t->body.map(x,t),t)
 
     # Convert to x-frame with dξ/dx⁻¹ (d has already been scaled)
@@ -25,7 +26,7 @@ end
 Signed distance from `x` to closest point on `body.curve` at time `t`. Sign depends on the
 winding direction of the parametric curve.
 """
-sdf(body::AbstractParametricBody,x,t) = curve_props(body,x,t)[1]
+sdf(body::AbstractParametricBody,x,t;kwargs...) = curve_props(body,x,t;kwargs...)[1]
 
 """
     ParametricBody{T::Real}(curve,locate) <: AbstractBody
@@ -72,9 +73,15 @@ get_scale(map,x::SVector{D,T}) where {D,T} = (dξdx=ForwardDiff.jacobian(x->map(
 ParametricBody(curve,locate;dotS=get_dotS(curve),thk=0f0,boundary=true,map=dmap,x₀=SA_F32[0,0],
     scale=get_scale(map,x₀),T=promote_type(typeof(thk),typeof(scale)),kwargs...) = ParametricBody(curve,dotS,locate,map,T(scale),T(thk/2),boundary)
 
-function curve_props(body::ParametricBody,x,t)
-    # Map x to ξ, locate nearest u, and get vector
+function curve_props(body::ParametricBody,x,t;fastd²=Inf)
+    # Map x to ξ and do fast bounding box check
     ξ = body.map(x,t)
+    if isfinite(fastd²) && applicable(body.locate,ξ,t,true)
+        d = body.scale*body.locate(ξ,t,true)-body.half_thk
+        d^2>fastd² && return d,zero(x),zero(x)
+    end
+
+    # Locate nearest u, and get vector
     u = body.locate(ξ,t)
     p = ξ-body.curve(u,t)
 

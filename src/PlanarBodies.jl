@@ -34,17 +34,18 @@ function PlanarBody(curve::NurbsCurve;map=dmap,T=eltype(curve.pnts),thk=T(√3+2
     PlanarBody(planform,wmap,scale,T(thk/2))
 end
 
-function curve_props(body::PlanarBody{T},x::SVector{3},t) where T
+function curve_props(body::PlanarBody{T},x::SVector{3},t;fastd²=Inf) where T
     # Get vector to point
     ξ = body.map(x,t)
     if body.scale*abs(ξ[3])<2body.half_thk # might be close to planar body
-        d,n,_ = curve_props(body.planform,SA[ξ[1],ξ[2]],t)
+        d,n,_ = curve_props(body.planform,SA[ξ[1],ξ[2]],t;fastd²)
+        d^2>fastd² && return d,zero(x),zero(x) # can't trust n
         p = SA[max(d,0)*n[1],max(d,0)*n[2],ξ[3]]
     else
         p = SA[0,0,ξ[3]] # simple planar approximation
     end
 
     # return scaled distance, normal, and dot(S)=zero
-    n = p/(eps(T)+√(p'*p))
+    n = hat(p)
     return body.scale*p'*n-body.half_thk,n,zero(x)
 end
