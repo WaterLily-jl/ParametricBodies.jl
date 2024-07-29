@@ -91,6 +91,6 @@ end
 function update!(body::ParametricBody{T,L,S},uⁿ::AbstractArray{T},vⁿ::AbstractArray{T}) where {T,L<:NurbsLocator,S<:NurbsCurve}
     curve = NurbsCurve(uⁿ,body.curve.knots,body.curve.wgts)
     dotS = NurbsCurve(vⁿ,body.curve.knots,body.curve.wgts)
-    ParametricBody(curve,dotS,NurbsLocator(curve,step=body.locate.step),body.map,body.scale,body.thk,body.boundary)
+    ParametricBody(curve,dotS,NurbsLocator(curve,step=body.locate.step),body.map,body.scale,body.half_thk,body.boundary)
 end
 update!(body::ParametricBody,uⁿ::AbstractArray,Δt) = update!(body,uⁿ,(uⁿ-copy(body.curve.pnts))/Δt)

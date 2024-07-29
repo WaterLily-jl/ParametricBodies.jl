@@ -10,9 +10,9 @@ struct PlanarBody{T,P<:ParametricBody,F<:Function} <: AbstractParametricBody
     planform::P
     map::F
     scale::T
-    thk::T
+    half_thk::T
 end
-function PlanarBody(curve,lims::Tuple;T=Float32,map=dmap,thk=T(√3/2+1),kwargs...)
+function PlanarBody(curve,lims::Tuple;T=Float32,map=dmap,thk=T(√3+2),kwargs...)
     # Wrap in type safe functions (GPUs are picky)
     wcurve(u::U,t::T) where {U,T} = SVector{2,promote_type(U,T)}(curve(u,t))
     wmap(x::SVector{n,X},t::T) where {n,X,T} = SVector{n,promote_type(X,T)}(map(x,t))
@@ -20,24 +20,24 @@ function PlanarBody(curve,lims::Tuple;T=Float32,map=dmap,thk=T(√3/2+1),kwargs.
     scale = T(ParametricBodies.get_scale(map,SA{T}[0,0,0]))
     locate = HashedLocator(wcurve,T.(lims);T,step=inv(scale),kwargs...)
     planform = ParametricBody(wcurve,locate)
-    PlanarBody(planform,wmap,scale,thk)
+    PlanarBody(planform,wmap,scale,T(thk/2))
 end
-Adapt.adapt_structure(to, x::PlanarBody) = PlanarBody(adapt(to,x.planform),x.map,x.scale,x.thk)
+Adapt.adapt_structure(to, x::PlanarBody) = PlanarBody(adapt(to,x.planform),x.map,x.scale,x.half_thk)
 
-function PlanarBody(curve::NurbsCurve;map=dmap,T=eltype(curve.pnts),thk=T(√3/2+1))
+function PlanarBody(curve::NurbsCurve;map=dmap,T=eltype(curve.pnts),thk=T(√3+2))
     # Wrap in type safe function (GPUs are picky)
     wmap(x::SVector{n,X},t::T) where {n,X,T} = SVector{n,promote_type(X,T)}(map(x,t))
 
     scale = T(ParametricBodies.get_scale(map,SA{T}[0,0,0]))
     locate = NurbsLocator(curve;step=inv(scale))
     planform = ParametricBody(curve,locate)
-    PlanarBody(planform,wmap,scale,thk)
+    PlanarBody(planform,wmap,scale,T(thk/2))
 end
 
 function curve_props(body::PlanarBody{T},x::SVector{3},t) where T
     # Get vector to point
     ξ = body.map(x,t)
-    if body.scale*abs(ξ[3])<2body.thk # might be close to planar body
+    if body.scale*abs(ξ[3])<2body.half_thk # might be close to planar body
         d,n,_ = curve_props(body.planform,SA[ξ[1],ξ[2]],t)
         p = SA[max(d,0)*n[1],max(d,0)*n[2],ξ[3]]
     else
@@ -46,5 +46,5 @@ function curve_props(body::PlanarBody{T},x::SVector{3},t) where T
 
     # return scaled distance, normal, and dot(S)=zero
     n = p/(eps(T)+√(p'*p))
-    return body.scale*p'*n-body.thk,n,zero(x)
+    return body.scale*p'*n-body.half_thk,n,zero(x)
 end

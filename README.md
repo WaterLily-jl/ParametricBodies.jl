@@ -69,7 +69,7 @@ cps = SA_32[7 7 0 -7 -7 -7  0  7 7
 weights = SA_32[1.,√2/2,1.,√2/2,1.,√2/2,1.,√2/2,1.] # A perfect circle requires...
 knots = SA_32[0,0,0,1/4,1/4,1/2,1/2,3/4,3/4,1,1,1]  # non-uniform knot and weight vectors
 circle = NurbsCurve(cps,knots,weights)
-torus = ParametricBody(circle,thk=1,boundary=false)
+torus = ParametricBody(circle,thk=2,boundary=false)
 ```
 
 ### Mappings & 3D surfaces
@@ -85,7 +85,7 @@ function arc_sim(R = 64, α = π/16, U=1, Re=100)
     center = SA[R,-2R÷5]
     scale = R
     map(x,t) = Rotate*(x-center)/scale # map from x-space to ξ-space
-    arc = HashedBody(curve,(π/3,2π/3),thk=√2/2+1,boundary=false,map=map)
+    arc = HashedBody(curve,(π/3,2π/3),thk=√2+2,boundary=false,map=map)
     Simulation((3R,R),(U,0),R,body=arc,ν=U*R/Re)
 end
 sim = arc_sim();

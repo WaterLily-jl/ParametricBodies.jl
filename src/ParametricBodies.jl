@@ -57,11 +57,11 @@ Example:
 """
 struct ParametricBody{T,L<:Function,S<:Function,dS<:Function,M<:Function} <: AbstractParametricBody
     curve::S    #ξ = curve(v,t)
-    dotS::dS   #dξ/dt
-    locate::L  #u = locate(ξ,t)
-    map::M     #ξ = map(x,t)
-    scale::T   #|dx/dξ| = scale
-    thk::T     #thickness
+    dotS::dS    #dξ/dt
+    locate::L   #u = locate(ξ,t)
+    map::M      #ξ = map(x,t)
+    scale::T    #|dx/dξ| = scale
+    half_thk::T #half thickness
     boundary::Bool 
 end
 # Default functions
@@ -70,7 +70,7 @@ dmap(x,t) = x
 get_dotS(curve) = (u,t)->ForwardDiff.derivative(t->curve(u,t),t)
 get_scale(map,x::SVector{D,T}) where {D,T} = (dξdx=ForwardDiff.jacobian(x->map(x,zero(T)),x); T(abs(det(dξdx))^(-1/D)))
 ParametricBody(curve,locate;dotS=get_dotS(curve),thk=0f0,boundary=true,map=dmap,x₀=SA_F32[0,0],
-    scale=get_scale(map,x₀),T=promote_type(typeof(thk),typeof(scale)),kwargs...) = ParametricBody(curve,dotS,locate,map,T(scale),T(thk),boundary)
+    scale=get_scale(map,x₀),T=promote_type(typeof(thk),typeof(scale)),kwargs...) = ParametricBody(curve,dotS,locate,map,T(scale),T(thk/2),boundary)
 
 function curve_props(body::ParametricBody,x,t)
     # Map x to ξ, locate nearest u, and get vector
@@ -82,11 +82,11 @@ function curve_props(body::ParametricBody,x,t)
     n = notC¹(body.locate,u) ? hat(p) : (s=tangent(body.curve,u,t); body.boundary ? perp(s) : align(p,s))
     
     # Get scaled & thinkess adjusted distance and dot(S)
-    return (body.scale*p'*n-body.thk,n,body.dotS(u,t))
+    return (body.scale*p'*n-body.half_thk,n,body.dotS(u,t))
 end
 notC¹(::Function,u) = false
 
-hat(p) = p/√(p'*p)
+hat(p) = p/√(eps(eltype(p))+p'*p)
 tangent(curve,u,t) = hat(ForwardDiff.derivative(u->curve(u,t),u))
 align(p,s) = hat(p-(p'*s)*s)
 perp(s::SVector{2}) = SA[s[2],-s[1]]

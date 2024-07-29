@@ -73,7 +73,7 @@ end
     @test [measure(body,SA[-0.3,-0.4],0.)...] ≈ [-0.5,[-3/5,-4/5],[4/5,-3/5]] rtol=1e-4
 
     # model arc as space-curve with finite thickness
-    thk = 0.1
+    thk = 0.2
     body = HashedBody(curve,(0.,π/2);step,buffer,T=Float64,thk,boundary=false)
     @test [measure(body,SA[0.7,-0.4],0.)...] ≈ [0.4,[-3/5,-4/5],[0,1]] rtol=1e-4
     @test measure(body,SA[0.4,0.3],0.)[2] ≈ [-4/5,-3/5] rtol=1e-4
@@ -164,7 +164,7 @@ end
                  0 5 5  5  0 -5 -5 -5 0
                  0 0 0  0  0  0  0  0 0]
     circle3 = NurbsCurve(cps3,circle.knots,circle.wgts)
-    body3 = ParametricBody(circle3,boundary=false,thk=1)
+    body3 = ParametricBody(circle3,boundary=false,thk=2)
     @test [measure(body3,SA[3.,4.,2.],0.)...]≈[1,[0,0,1],[0,0,0]]
 end
 @testset "Extruded Bodies" begin
