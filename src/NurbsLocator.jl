@@ -42,14 +42,16 @@ include("Davidon.jl")
 Estimate the parameter value `u⁺ = argmin_u (x-curve(u,t))²` for a NURBS by looping through the 
 spline segments.
 """
-function (l::NurbsLocator{C})(x,t,fast=false) where C<:NurbsCurve{n,d} where {n,d}
-    fast && return √sum(abs2,max.(0,abs.(x-l.C)-l.R))
-    loc_nurbs(l,x,t,Val(d))
-end
-function loc_nurbs(l,x,t,::Val{degree}) where degree # C¹⁺ NURBS locator
+# function (l::NurbsLocator{C})(x,t,fast=false) where C<:NurbsCurve{n,d} where {n,d}
+#     fast && return √sum(abs2,max.(0,abs.(x-l.C)-l.R))
+#     loc_nurbs(l,x,t,Val(d))
+# end
+# function loc_nurbs(l,x,t,::Val{degree}) where degree # C¹⁺ NURBS locator
+function (l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,degree} where {n,degree}
     # location, Dual distance and Davidon kwargs
     uv(i) = l.curve.knots[degree+i+1]
-    dis2 = fdual(u->sum(abs2,x-l.curve(u,t)),uv(0))
+    dis2(u) = (x=u,f=sum(abs2,x-l.curve(u,t)),∂=ForwardDiff.derivative(u->sum(abs2,x-l.curve(u,t)),u))
+    # dis2 = fdual(u->sum(abs2,x-l.curve(u,t)),uv(0))
     kwargs = (tol=5f-3,∂tol=5l.step,itmx=2degree)
 
     # Locate closest segment
@@ -58,7 +60,10 @@ function loc_nurbs(l,x,t,::Val{degree}) where degree # C¹⁺ NURBS locator
         a=b; b = dis2(uv(i))
         a==b && continue
         uᵢ,vᵢ = inv_cubic(dis2,a,b) # quick check
-        uᵢ.f<2u.f && (uᵢ=davidon(dis2,uᵢ,vᵢ;kwargs...))
+        # uᵢ.f<2u.f && (uᵢ=davidon(dis2,uᵢ,vᵢ;kwargs...))
+        uᵢ.f<2u.f && for _ in 1:5
+            uᵢ,vᵢ = inv_cubic(dis2,uᵢ,vᵢ)
+        end
         uᵢ.f<u.f && (u=uᵢ)
     end; u.x # Best location
 end
