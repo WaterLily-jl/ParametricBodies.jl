@@ -1,7 +1,7 @@
 name = "ParametricBodies"
 uuid = "06905c2e-4b4a-4765-8bb9-c6b6b2b99b1d"
 authors = ["Gabriel Weymouth"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
