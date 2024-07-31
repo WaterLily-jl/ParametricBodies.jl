@@ -138,11 +138,6 @@ end
     @test nurbs.knots≈[0.,0.,0.,0.,28/51,1.,1.,1.,1.]
     @test all(reduce(hcat,nurbs.(s,0.0)).-pnts.<10eps(eltype(pnts)))
 end
-@testset "Davidon.jl" begin
-    @test ParametricBodies.davidon(x->(x+3)*(x-1)^2,-2.,2.,tol=1e-6) ≈ 1
-    @test ParametricBodies.davidon(x->-log(x)/x,1.,10.,tol=1e-6) ≈ exp(1)
-    @test ParametricBodies.davidon(x->cos(x)+cos(3x)/3,0.,1.75π,tol=1e-7) ≈ π
-end
 @testset "NurbsLocator.jl" begin
     # define a circle
     T = Float32
@@ -159,9 +154,9 @@ end
     @test locate.C≈[0,0]
     @test locate.R≈[5,5]
 
-    # @test [measure(body,SA[5,5],0,fastd²=2)...]≈[5√2-5,[0,0],[0,0]] rtol=1e-6 # inside BBox but outside d²
-    # @test [measure(body,SA[6,8],0,fastd²=2)...]≈[√10,[0,0],[0,0]] rtol=1e-6   # outside BBox (bounded d²)
-    # @test [measure(body,SA[6,0],0,fastd²=2)...]≈[1,[1,0],[0,0]] rtol=1e-6     # outside BBox but inside d²
+    @test [measure(body,SA[5,5],0,fastd²=2)...]≈[5√2-5,[0,0],[0,0]] rtol=1e-6 # inside BBox but outside d²
+    @test [measure(body,SA[6,8],0,fastd²=2)...]≈[√10,[0,0],[0,0]] rtol=1e-6   # outside BBox (bounded d²)
+    @test [measure(body,SA[6,0],0,fastd²=2)...]≈[1,[1,0],[0,0]] rtol=1e-6     # outside BBox but inside d²
 
     # Check DynamicNurbsBody
     body = DynamicNurbsBody(circle)
