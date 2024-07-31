@@ -8,7 +8,7 @@ end
 
 integrate a function f(uv) along the curve
 """
-integrate(crv::Function) = integrate(ξ->1.0,crv,0;N=N)
+integrate(crv::Function,lims;N=16) = integrate(ξ->1.0,crv,0,lims;N)
 function integrate(f::Function,crv::Function,t,lims;N=64)
     # integrate NURBS curve to compute integral
     uv_, w_ = _gausslegendre(N,typeof(first(lims)))
