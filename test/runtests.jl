@@ -164,8 +164,12 @@ end
     # @test [measure(body,SA[6,0],0,fastd²=2)...]≈[1,[1,0],[0,0]] rtol=1e-6     # outside BBox but inside d²
 
     # Check DynamicNurbsBody
-    body = DynamicNurbsBody(circle)    
+    body = DynamicNurbsBody(circle)
     @test [measure(body,SA[5,5],0)...]≈[5√2-5,[√2/2,√2/2],[0,0]] rtol=1e-6
+    @test typeof.(measure(body,SA{T}[5,5],T(0)))==(T,SVector{2,T},SVector{2,T}) # passing in T is type stable
+    @test typeof.(measure(body,SA[5.,5.],0.))==(Float64,SVector{2,Float64},SVector{2,Float64}) # promotion works
+    @test typeof.(measure(body,SA[5,5],0))==(T,SVector{2,T},SVector{2,T}) broken=true # but passing in Ints give mixed type output...
+
     body = update!(body, circle.pnts .+T(0.1), T(0.1))
     @test [measure(body,SA[5,5],0)...]≈[4.9√2-5,[√2/2,√2/2],[1,1]] rtol=1e-6
     @test [measure(body,SA[0,0],0)...]≈[0.1√2-5,[-√2/2,-√2/2],[1,1]] rtol=1e-6

@@ -1,6 +1,6 @@
 # Davidon minimizer (should be in Optim, but isn't yet)
 function davidon(f,a::R,b::R;kwargs...) where R<:Real
-    eval = fdual(f,a)
+    eval(a) = fdual(f,a)
     davidon(eval,eval(a),eval(b);kwargs...).x
 end
 function davidon(f,a,b;tol=√eps(a.x),∂tol=tol,verbose=false,itmx=1000)
@@ -14,12 +14,10 @@ function davidon(f,a,b;tol=√eps(a.x),∂tol=tol,verbose=false,itmx=1000)
     end; a
 end
 using ForwardDiff: Dual,Tag,value,partials
-function fdual(f::F,::R) where {F<:Function,R<:Real}
+function fdual(f::F,x::R) where {F<:Function,R<:AbstractFloat}
     T = typeof(Tag(f,R))
-    function (x)
-        fx = f(Dual{T}(x,one(R)))
-        (x=x,f=value(fx),∂=partials(T,fx,1))
-    end
+    fx = f(Dual{T}(x,one(R)))
+    (x=x,f=value(fx),∂=partials(T,fx,1))
 end
 function inv_cubic(f,a,b;tol=√eps(a.x))
     a.f>b.f && ((a,b)=(b,a)) # a is current minimizer

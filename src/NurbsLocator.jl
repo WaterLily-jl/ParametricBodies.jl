@@ -50,8 +50,7 @@ spline segments.
 function (l::NurbsLocator{C})(x,t) where C<:NurbsCurve{n,degree} where {n,degree}
     # location, Dual distance and Davidon kwargs
     uv(i) = l.curve.knots[degree+i+1]
-    dis2(u) = (x=u,f=sum(abs2,x-l.curve(u,t)),∂=ForwardDiff.derivative(u->sum(abs2,x-l.curve(u,t)),u))
-    # dis2 = fdual(u->sum(abs2,x-l.curve(u,t)),uv(0))
+    dis2(u) = fdual(u->sum(abs2,x-l.curve(u,t)),u)
     kwargs = (tol=5f-3,∂tol=5l.step,itmx=2degree)
 
     # Locate closest segment
@@ -85,22 +84,22 @@ end
 
 Creates a `ParametricBody` with `locate=NurbsLocator`.
 """
-ParametricBody(curve::NurbsCurve;step=1,kwargs...) = ParametricBody(curve,NurbsLocator(curve;step);kwargs...)
+ParametricBody(curve::NurbsCurve;step=1,T=eltype(curve.pnts),kwargs...) = ParametricBody(curve,NurbsLocator(curve;step);T,kwargs...)
 
 """
     DynamicNurbsBody(curve::NurbsCurve;kwargs...)
 
 Creates a `ParametricBody` with `locate=NurbsLocator`, and `dotS` defined by a second spline curve.
 """
-function DynamicNurbsBody(curve::NurbsCurve;step=1,kwargs...)
+function DynamicNurbsBody(curve::NurbsCurve;kwargs...)
     # Make a zero velocity spline
     dotS = NurbsCurve(zeros(typeof(curve.pnts)),curve.knots,curve.wgts)
     # Make body
-    ParametricBody(curve,NurbsLocator(curve;step);dotS,kwargs...)
+    ParametricBody(curve;dotS,kwargs...)
 end
 function update!(body::ParametricBody{T,L,S},uⁿ::AbstractArray{T},vⁿ::AbstractArray{T}) where {T,L<:NurbsLocator,S<:NurbsCurve}
     curve = NurbsCurve(uⁿ,body.curve.knots,body.curve.wgts)
     dotS = NurbsCurve(vⁿ,body.curve.knots,body.curve.wgts)
     ParametricBody(curve,dotS,NurbsLocator(curve,step=body.locate.step),body.map,body.scale,body.half_thk,body.boundary)
 end
-update!(body::ParametricBody,uⁿ::AbstractArray,Δt) = update!(body,uⁿ,(uⁿ-copy(body.curve.pnts))/Δt)
+update!(body::ParametricBody,uⁿ::AbstractArray,Δt::Number) = update!(body,uⁿ,(uⁿ-copy(body.curve.pnts))/Δt)
