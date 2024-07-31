@@ -1,93 +1,125 @@
 """
     NurbsLocator
 
-    - `refine<:Function`` Performs bounded Newton root-finding step
-    - `lims::NTuple{2,T}:` limits of the `uv` parameter
-    - `hash<:AbstractArray{T,2}:` Hash to supply good IC to `refine`
-    - `lower::SVector{2,T}:` bottom corner of the hash in ξ-space
-    - `step::T:` ξ-resolution of the hash
+    - `curve<:NurbsCurve` NURBS defined curve
+    - `step<:Real` buffer size around control points
+    - `C¹end::Bool` check if the curve is closed and C¹
 
-Type to preform efficient and fairly stable `locate`ing on parametric curves. Newton's method is fast, 
-but can be very unstable for general parametric curves. This is mitigated by supplying a close initial 
-`uv` guess by interpolating `hash``, and by bounding the derivative adjustment in the Newton `refine`ment.
-
-----
-
-    NurbsLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float32,mem=Array)
-
-Creates NurbsLocator by sampling the curve and finding the bounding box. This box is expanded by the amount `buffer`. 
-The hash array is allocated to span the box with resolution `step` and initialized using `update!(::,curve,t⁰)`.
+NURBS-specific locator function. Loops through the spline sections, locating points accurately 
+(using inverse cubic interpolation) only if it's possible for that to be the closest section.
 """
-struct NurbsLocator{T,F<:Function,G<:Function,B<:AbstractVector{T}} <: AbstractLocator
-    refine::F
-    surf::G
-    lims::NTuple{2,T}
-    lower::B
-    upper::B
+struct NurbsLocator{C<:NurbsCurve,T<:Number,S<:SVector} <: AbstractLocator
+    curve::C
     step::T
-end
-Adapt.adapt_structure(to, x::NurbsLocator) = NurbsLocator(x.refine,x.surf,x.lims,adapt(to,x.lower),adapt(to,x.upper),x.step)
-
-function NurbsLocator(curve::NurbsCurve{n},lims;t⁰=0,step=1,buffer=2,mem=Array) where n
-    # Apply type and get refinement function
-    T = eltype(curve.pnts); lims,t⁰,step = T.(lims),T(t⁰),T(step)
-    f = refine(curve,lims,curve(first(lims),t⁰)≈curve(last(lims),t⁰))
-
-    # Get curve's bounding box
-    lower = curve(first(lims),t⁰) |> mem; upper = curve(last(lims),t⁰) |> mem
-    @assert eltype(lower)==T "`curve` is not type stable"
-    @assert isa(curve(first(lims),t⁰),SVector{n,T}) "`curve` doesn't return a 2D SVector"
-
-    # Allocate struct, and update
-    l=adapt(mem,NurbsLocator{T,typeof(f),typeof(curve),typeof(lower)}(f,curve,lims,lower,upper,step))
-    update!(l,curve,t⁰); l # needs to return the locator
+    C¹end::Bool
+    C::S
+    R::S
 end
 
-# if it's open, we need to check that we are not at the endpoints
-notC¹(l::NurbsLocator,uv) = !(l.surf(first(l.lims),0)≈l.surf(last(l.lims),0)) && any(uv.≈l.lims)
-
-"""
-    update!(l::NurbsLocator,surf,t)
-
-Updates `l` for `surf` at time `t` by searching through `samples` and refining.
-"""
-# update!(l::NurbsLocator,surf,t)=(_update!(get_backend(l.lower),64)(l,surf,t,ndrange=size(l.lower));l)
-# @kernel function _update!(l::NurbsLocator{T},surf,@Const(t)) where T
-function update!(l::NurbsLocator{T},surf,t) where T
-    # update bounding box
-    l.lower .= l.upper .= surf(zero(T),t)
-    # the cps net in a convex hull of the curve
-    for x in eachcol(surf.pnts)
-        l.lower .= min.(l.lower,x)
-        l.upper .= max.(l.upper,x)
-    end
-    l.lower .= l.lower.-2*l.step
-    l.upper .= l.upper.+2*l.step
+function NurbsLocator(curve::NurbsCurve;step=1,t=0.)
+    # Check ends
+    low,high = first(curve.knots),last(curve.knots)
+    c(u) = curve(u,t); dc(u) = ForwardDiff.derivative(c,u)
+    C¹end = c(low)≈c(high) && dc(low)≈dc(high)
+    # Control-point bounding box 
+    ex = extrema(curve.pnts,dims=2)
+    low,high = SVector(first.(ex)),SVector(last.(ex))
+    NurbsLocator(curve,step,C¹end,0.5f0*(low+high),0.5f0(high-low))
 end
+Adapt.adapt_structure(to, x::NurbsLocator) = NurbsLocator(x.curve,x.step,x.C¹end,x.C,x.R)
 
+update!(l::NurbsLocator,curve,t) = l=NurbsLocator(curve,step=l.step;t) # just make a new locator
+
+function notC¹(l::NurbsLocator{C},uv) where C<:NurbsCurve{n,d} where {n,d}
+    d==1 && return any(uv.≈l.curve.knots) # straight line spline is not C¹ at any knot
+    # Assuming we don't have repeated knots, ends are the only remaining potential not C¹ locations
+    low,high = first(l.curve.knots),last(l.curve.knots)
+    (uv≈low || uv≈high) ? !l.C¹end : false 
+end
 """
     (l::NurbsLocator)(x,t)
 
-Estimate the parameter value `uv⁺ = argmin_uv (X-curve(uv,t))²` in two steps:
-1. Interploate an initial guess  `uv=l(x)`. Return `uv⁺~uv` if `x` is outside the bounding box.
-2. Apply a bounded Newton step `uv⁺≈l.refine(x,uv,t)` to refine the estimate.
+Estimate the parameter value `u⁺ = argmin_u (x-curve(u,t))²` for a NURBS by looping through the 
+spline segments.
 """
-function (l::NurbsLocator{T})(x,t) where T
-    # check if the point is in bounding box
-    inside = all(x.>l.lower) && all(x.<l.upper)
-    # if we are outside, this is sufficient
-    # !inside && return T(0.5)
+function (l::NurbsLocator{C})(x,t,fast=false;tol=5f-3,∂tol=5l.step,itmx=2degree) where C<:NurbsCurve{n,degree} where {n,degree}
+    fast && return √sum(abs2,max.(0,abs.(x-l.C)-l.R))
+    degree==1 && return lin_loc(l,x,t)
 
-    # Grid search for uv within bounds
-    @inline dis2(uv) = (q=x-l.surf(uv,t); q'*q)
-    uv = zero(T); d = dis2(uv)
-    for uvᵢ in range(l.lims...,128)
-        dᵢ = dis2(uvᵢ)
-        dᵢ<d && (uv=uvᵢ; d=dᵢ)
-    end
-    !inside && return uv
+    # location and Dual distance function
+    uv(i) = l.curve.knots[degree+i+1]
+    dis2(u) = fdual(u->sum(abs2,x-l.curve(u,t)),u)  
 
-    # Otherwise, refine estimate with two Newton steps
-    uv = l.refine(x,uv,t)
-    return l.refine(x,uv,t)
+    # Locate closest segment
+    u = b = dis2(uv(0))
+    for i in 1:length(l.curve.wgts)-degree
+        a = b; b = dis2(uv(i))
+        a==b && continue
+        (aᵢ,bᵢ) = a.f<b.f ? (a,b) : (b,a)  # aᵢ is current minimizer
+        uᵢ,vᵢ = inv_cubic(dis2,aᵢ,bᵢ;tol)  # first refinement
+        uᵢ.f<2u.f && for _ in 1:itmx       # requires accurate search
+            (abs(uᵢ.x-vᵢ.x) ≤ 2tol || abs(uᵢ.∂) < ∂tol ||(uᵢ,vᵢ)==(aᵢ,bᵢ)) && break
+            aᵢ,bᵢ = uᵢ,vᵢ
+            uᵢ,vᵢ = inv_cubic(dis2,aᵢ,bᵢ;tol)
+        end
+        uᵢ.f<u.f && (u=uᵢ) # Replace current best
+    end; u.x               # Return location
 end
+# Inversed Cubic Interpolation minimizer
+using ForwardDiff: Dual,Tag,value,partials
+function fdual(f::F,x::R) where {F<:Function,R<:AbstractFloat}
+    T = typeof(Tag(f,R))
+    fx = f(Dual{T}(x,one(R)))
+    (x=x,f=value(fx),∂=partials(T,fx,1))
+end
+function inv_cubic(f,a,b;tol=√eps(a.x))
+    Δ = b.x-a.x
+    v = a.∂+b.∂-3(b.f-a.f)/Δ; w = v^2-a.∂*b.∂
+    w < 0 && return a,b      # bust!
+    w = copysign(√w,Δ); q = b.∂-a.∂+2w
+    !(0<(b.∂+w-v)/q<1) && return a,b # bust!
+    margin = max(0.1f0,tol/abs(Δ))
+    c = f(b.x-Δ*clamp((b.∂+w-v)/q,margin,1-margin))
+    c.f > b.f && return a,b  # bust!
+    c.f > a.f && return a,c  # save minimizer
+    c,(c.∂*Δ<0 ? b : a)      # pick "downhill" bracket
+end
+function lin_loc(l::NurbsLocator,x,t)
+    uv(i) = l.curve.knots[1+i]
+    dis2(u) = (x=u,f=sum(abs2,x-l.curve(u,t)))
+
+    # Locate closest segment
+    u = dis2(uv(1)); b = l.curve(uv(1),t)
+    for i in 1:length(l.curve.wgts)-1
+        a = b; b = l.curve(uv(i+1),t)
+        a==b && continue
+        s = b-a                            # tangent
+        p = clamp(((x-a)'*s)/(s'*s),0,1)   # projected distance
+        uᵢ = dis2(uv(i)+(uv(i+1)-uv(i))*p) # segment min
+        uᵢ.f<u.f && (u=uᵢ) # Replace current best
+    end; u.x               # Return location
+end
+"""
+    ParametricBody(curve::NurbsCurve;kwargs...)
+
+Creates a `ParametricBody` with `locate=NurbsLocator`.
+"""
+ParametricBody(curve::NurbsCurve;step=1,T=eltype(curve.pnts),kwargs...) = ParametricBody(curve,NurbsLocator(curve;step);T,kwargs...)
+
+"""
+    DynamicNurbsBody(curve::NurbsCurve;kwargs...)
+
+Creates a `ParametricBody` with `locate=NurbsLocator`, and `dotS` defined by a second spline curve.
+"""
+function DynamicNurbsBody(curve::NurbsCurve;kwargs...)
+    # Make a zero velocity spline
+    dotS = NurbsCurve(zeros(typeof(curve.pnts)),curve.knots,curve.wgts)
+    # Make body
+    ParametricBody(curve;dotS,kwargs...)
+end
+function update!(body::ParametricBody{T,L,S},uⁿ::AbstractArray{T},vⁿ::AbstractArray{T}) where {T,L<:NurbsLocator,S<:NurbsCurve}
+    curve = NurbsCurve(uⁿ,body.curve.knots,body.curve.wgts)
+    dotS = NurbsCurve(vⁿ,body.curve.knots,body.curve.wgts)
+    ParametricBody(curve,dotS,NurbsLocator(curve,step=body.locate.step),body.map,body.scale,body.half_thk,body.boundary)
+end
+update!(body::ParametricBody,uⁿ::AbstractArray,Δt::Number) = update!(body,uⁿ,(uⁿ-copy(body.curve.pnts))/Δt)

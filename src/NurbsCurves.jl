@@ -18,7 +18,7 @@ end
 function NurbsCurve(pnts::StaticArray{Tuple{dim,count},T},knots,weights) where {dim,count,T<:AbstractFloat}
     @assert count == length(weights) "Invalid NURBS: each control point should have a corresponding weights."
     @assert count < length(knots) "Invalid NURBS: the number of knots should be greater than the number of control points."
-    degree = length(knots) - count - 1 # the one in the input is not used
+    degree = length(knots) - count - 1
     knots = SA{T}[knots...]; weights = SA{T}[weights...]
     NurbsCurve{dim,degree,typeof(pnts),typeof(knots),typeof(weights)}(pnts,knots,weights)
 end

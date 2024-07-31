@@ -1,3 +1,4 @@
+using Adapt,KernelAbstractions
 """
     HashedLocator
 
@@ -21,12 +22,12 @@ The hash array is allocated to span the box with resolution `step` and initializ
 Example:
 
     t = 0.
-    surf(θ,t) = SA[cos(θ+t),sin(θ+t)]
-    locator = HashedLocator(surf,(0.,2π),t⁰=t,step=0.25)
+    curve(θ,t) = SA[cos(θ+t),sin(θ+t)]
+    locator = HashedLocator(curve,(0.,2π),t⁰=t,step=0.25)
     @test isapprox(locator(SA[.3,.4],t),atan(4,3),rtol=1e-4)
-    @test isapprox(surf(locator(SA[-1.2,.9],t),t),SA[-4/5,3/5],rtol=1e-4)
+    @test isapprox(curve(locator(SA[-1.2,.9],t),t),SA[-4/5,3/5],rtol=1e-4)
 
-    body = ParametricBody(surf,locator)
+    body = ParametricBody(curve,locator)
     @test isapprox(sdf(body,SA[-.3,-.4],t),-0.5,rtol=1e-4) # inside hash
     @test isapprox(sdf(body,SA[-3.,-4.],t), 4.0,rtol=2e-2) # outside hash
 """
@@ -39,7 +40,7 @@ struct HashedLocator{T,F<:Function,A<:AbstractArray{T,2}} <: AbstractLocator
 end
 Adapt.adapt_structure(to, x::HashedLocator) = HashedLocator(x.refine,x.lims,adapt(to,x.hash),x.lower,x.step)
 
-function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float32,mem=Array)
+function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float32,mem=Array,kwargs...)
     # Apply type and get refinement function
     lims,t⁰,step = T.(lims),T(t⁰),T(step)
     f = refine(curve,lims,curve(first(lims),t⁰)≈curve(last(lims),t⁰))
@@ -56,7 +57,7 @@ function HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float32,mem=Array)
     end
 
     # Allocate hash and struct, and update hash
-    hash = fill(first(lims),ceil.(Int,(upper-lower)/step .+ (1+2buffer))...) |> mem
+    hash = fill(first(lims),Int.((upper-lower) .÷ step .+ (1+2buffer))...) |> mem
     l=adapt(mem,HashedLocator{T,typeof(f),typeof(hash)}(f,lims,hash,lower.-buffer*step,step))
     update!(l,curve,t⁰,samples)
 end
@@ -75,18 +76,18 @@ end
 notC¹(l::HashedLocator,uv) = any(uv.≈l.lims)
 
 """
-    update!(l::HashedLocator,surf,t,samples=l.lims)
+    update!(l::HashedLocator,curve,t,samples=l.lims)
 
-Updates `l.hash` for `surf` at time `t` by searching through `samples` and refining.
+Updates `l.hash` for `curve` at time `t` by searching through `samples` and refining.
 """
-update!(l::HashedLocator,surf,t,samples=l.lims)=(_update!(get_backend(l.hash),64)(l,surf,samples,t,ndrange=size(l.hash));l)
-@kernel function _update!(l::HashedLocator{T},surf,@Const(samples),@Const(t)) where T
+update!(l::HashedLocator,curve,t,samples=l.lims)=(_update!(get_backend(l.hash),64)(l,curve,samples,t,ndrange=size(l.hash));l)
+@kernel function _update!(l::HashedLocator{T},curve,@Const(samples),@Const(t)) where T
     # Map index to physical space
     I = @index(Global,Cartesian)
     x = l.step*(SVector{2,T}(I.I...) .-1)+l.lower
 
     # Grid search for uv within bounds
-    @inline dis2(uv) = (q=x-surf(uv,t); q'*q)
+    @inline dis2(uv) = (q=x-curve(uv,t); q'*q)
     uv = l.hash[I]; d = dis2(uv)
     for uvᵢ in samples
         dᵢ = dis2(uvᵢ)
@@ -117,3 +118,20 @@ function (l::HashedLocator)(x,t)
     uv = l.refine(x,uv,t)
     return l.refine(x,uv,t)
 end
+
+"""
+    HashedBody(curve,lims;T,mem,map)
+
+Creates a `ParametericBody` with `locate=HashedLocator(curve,lims...)`.
+"""
+function HashedBody(curve,lims::Tuple;T=Float32,map=dmap,kwargs...)
+    # Wrap in type safe functions (GPUs are picky)
+    wcurve(u::U,t::T) where {U,T} = SVector{2,promote_type(U,T)}(curve(u,t))
+    wmap(x::SVector{n,X},t::T) where {n,X,T} = SVector{n,promote_type(X,T)}(map(x,t))
+
+    locate = HashedLocator(wcurve,T.(lims);kwargs...)
+    ParametricBody(wcurve,locate;map=wmap,kwargs...)
+end
+Adapt.adapt_structure(to, x::ParametricBody{T,L}) where {T,L<:HashedLocator} =
+    ParametricBody(x.curve,x.dotS,adapt(to,x.locate),x.map,x.scale,x.half_thk,x.boundary)
+update!(body::ParametricBody{T,L},t) where {T,L<:HashedLocator} = update!(body.locate,body.curve,T(t))

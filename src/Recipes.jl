@@ -35,7 +35,7 @@ Plot `recipes` for `ParametricBody`.
         linecolor := :black
         linewidth := 2
         markershape := :none
-        c = [-b.map(-b.surf(s,time),time) for s ∈ range(b.locate.lims...;length=N)]
+        c = [-b.map(-b.curve(s,time),time) for s ∈ range(b.locate.lims...;length=N)]
         getindex.(c,1).+shift[1],getindex.(c,2).+shift[2]
     end
 end

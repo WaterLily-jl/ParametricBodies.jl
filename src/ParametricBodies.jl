@@ -1,76 +1,20 @@
 module ParametricBodies
 
 using StaticArrays,ForwardDiff
-using Adapt,KernelAbstractions
-
-abstract type AbstractLocator end
-export AbstractLocator
-
-include("HashedLocators.jl")
-export HashedLocator, refine, mymod
-
-include("NurbsCurves.jl")
-export NurbsCurve,BSplineCurve,interpNurbs
-
 import WaterLily: AbstractBody,measure,sdf,interp
-"""
-    ParametricBody{T::Real}(surf,locate,map=(x,t)->x,scale=|∇map|⁻¹) <: AbstractBody
 
-    - `surf(uv::T,t::T)::SVector{2,T}:` parametrically define curve
-    - `locate(ξ::SVector{2,T},t::T):` method to find nearest parameter `uv` to `ξ`
-    - `map(x::SVector{2,T},t::T)::SVector{2,T}:` mapping from `x` to `ξ`
-    - `scale::T`: distance scaling from `ξ` to `x`.
-
-Explicitly defines a geometries by an unsteady parametric curve and optional coordinate `map`.
-The curve is currently limited to be 2D, and must wind counter-clockwise. Any distance scaling
-induced by the map needs to be uniform and `scale` is computed automatically unless supplied.
-
-Example:
-
-    surf(θ,t) = SA[cos(θ+t),sin(θ+t)]
-    locate(x::SVector{2},t) = atan(x[2],x[1])-t
-    body = ParametricBody(surf,locate)
-
-    @test body.surf(body.locate(SA[4.,3.],1),1) == SA[4/5,3/5]
-
-    d,n,V = measure(body,SA[-.75,1],4.)
-    @test d ≈ 0.25
-    @test n ≈ SA[-3/5, 4/5]
-    @test V ≈ SA[-4/5,-3/5]
-"""
 abstract type AbstractParametricBody <: AbstractBody end
-struct ParametricBody{T,S<:Function,L<:Union{Function,AbstractLocator},M<:Function} <: AbstractParametricBody
-    surf::S    #ξ = surf(uv,t)
-    locate::L  #uv = locate(ξ,t)
-    map::M     #ξ = map(x,t)
-    scale::T   #|dx/dξ| = scale
-end
-using CUDA
-function ParametricBody(surf,locate;map=(x,t)->x,T=Float32)
-    N = length(surf(zero(T),0.))
-    # Check input functions
-    x,t = zero(SVector{N,T}),T(0); ξ = map(x,t)
-    @CUDA.allowscalar uv = locate(ξ,t); p = ξ-surf(uv,t)
-    @assert isa(ξ,SVector{N,T}) "map type ≠ ParametricBody{T}"
-    @assert isa(uv,T) "locate type ≠ ParametricBody{T}"
-    @assert isa(p,SVector{N,T}) "surf type ≠ ParametricBody{T}"
-
-    ParametricBody(surf,locate,map,T(get_scale(map,x)))
-end
-
-import LinearAlgebra: det
-get_scale(map,x::SVector{D},t=0.) where D = (dξdx=ForwardDiff.jacobian(x->map(x,t),x); abs(det(dξdx))^(-1/D))
-  
 """
-    d,n,V = measure(body::ParametricBody,x,t)
+    d,n,V = measure(body::AbstractParametricBody,x,t)
 
-Determine the geometric properties of body.surf at time `t` closest to 
-point `x`. Both `dot(surf)` and `dot(map)` contribute to `V`.
+Determine the geometric properties of the body at time `t` closest to 
+point `x`. Both `dot(curve)` and `dot(map)` contribute to `V` if defined.
 """
-function measure(body::ParametricBody,x,t)
-    # Surf props and velocity in ξ-frame
-    d,n,uv = surf_props(body,x,t)
-    dξdt = ForwardDiff.derivative(t->body.surf(uv,t)-body.map(x,t),t)
+function measure(body::AbstractParametricBody,x,t;fastd²=Inf)
+    # curve props and velocity in ξ-frame
+    d,n,dotS = curve_props(body,x,t;fastd²)
+    d^2 > fastd² && return d,zero(x),zero(x)
+    dξdt = dotS-ForwardDiff.derivative(t->body.map(x,t),t)
 
     # Convert to x-frame with dξ/dx⁻¹ (d has already been scaled)
     dξdx = ForwardDiff.jacobian(x->body.map(x,t),x)
@@ -79,126 +23,101 @@ end
 """
     d = sdf(body::AbstractParametricBody,x,t)
 
-Signed distance from `x` to closest point on `body.surf` at time `t`. Sign depends on the
+Signed distance from `x` to closest point on `body.curve` at time `t`. Sign depends on the
 winding direction of the parametric curve.
 """
-sdf(body::AbstractParametricBody,x,t) = surf_props(body,x,t)[1]
+sdf(body::AbstractParametricBody,x,t;kwargs...) = curve_props(body,x,t;kwargs...)[1]
 
-function surf_props(body::ParametricBody,x,t)
-    # Map x to ξ and locate nearest uv
+"""
+    ParametricBody{T::Real}(curve,locate) <: AbstractBody
+
+    - `curve(u,t)` parametrically defined curve
+    - `dotS(u,t)=derivative(t->curve(u,t),t)` time derivative of curve 
+    - `locate(ξ,t)` method to find nearest parameter `u` to `ξ`
+    - `map(x,t)=x` mapping from `x` to `ξ`
+    - `scale=|∇map|⁻¹` distance scaling from `ξ` to `x`
+    - `thk=0` thickness offset for the signed distance
+    - `boundary=true` if the curve represent a body boundary, not a space-curve
+
+Explicitly defines a geometry by an unsteady parametric curve. The curve is currently limited 
+to be univariate, and must wind counter-clockwise if closed. The optional `dotS`, `map`, `scale`, 
+`thk` and `boundary` parameters allow for more general geometry embeddings.
+
+Example:
+
+    curve(θ,t) = SA[cos(θ+t),sin(θ+t)]
+    locate(x::SVector{2},t) = atan(x[2],x[1])-t
+    body = ParametricBody(curve,locate)
+
+    @test body.curve(body.locate(SA[4.,3.],1),1) == SA[4/5,3/5]
+
+    d,n,V = measure(body,SA[-.75,1],4.)
+    @test d ≈ 0.25
+    @test n ≈ SA[-3/5, 4/5]
+    @test V ≈ SA[-4/5,-3/5]
+"""
+struct ParametricBody{T,L<:Function,S<:Function,dS<:Function,M<:Function} <: AbstractParametricBody
+    curve::S    #ξ = curve(v,t)
+    dotS::dS    #dξ/dt
+    locate::L   #u = locate(ξ,t)
+    map::M      #ξ = map(x,t)
+    scale::T    #|dx/dξ| = scale
+    half_thk::T #half thickness
+    boundary::Bool 
+end
+# Default functions
+import LinearAlgebra: det
+dmap(x,t) = x
+get_dotS(curve) = (u,t)->ForwardDiff.derivative(t->curve(u,t),t)
+get_scale(map,x::SVector{D,T}) where {D,T} = (dξdx=ForwardDiff.jacobian(x->map(x,zero(T)),x); T(abs(det(dξdx))^(-1/D)))
+ParametricBody(curve,locate;dotS=get_dotS(curve),thk=0f0,boundary=true,map=dmap,x₀=SA_F32[0,0],
+    scale=get_scale(map,x₀),T=promote_type(typeof(thk),typeof(scale)),kwargs...) = ParametricBody(curve,dotS,locate,map,T(scale),T(thk/2),boundary)
+
+function curve_props(body::ParametricBody,x,t;fastd²=Inf)
+    # Map x to ξ and do fast bounding box check
     ξ = body.map(x,t)
-    uv = body.locate(ξ,t)
-
-    # Get normal direction and vector from surf to ξ
-    n = norm_dir(body.surf,uv,t)
-    p = ξ-body.surf(uv,t)
-
-    # Fix direction for C⁰ points, normalize, and get distance
-    notC¹(body.locate,uv) && p'*p>0 && (n = p)
-    n /=  √(n'*n)
-    return (body.scale*dis(p,n),n,uv)
-end
-dis(p,n) = n'*p # this implied that the curve is closed
-notC¹(::Function,uv) = false
-
-function norm_dir(surf,uv::Number,t)
-    s = ForwardDiff.derivative(uv->surf(uv,t),uv)
-    return SA[s[2],-s[1]]
-end
-
-Adapt.adapt_structure(to, x::ParametricBody{T,F,L}) where {T,F,L<:HashedLocator} =
-    ParametricBody(x.surf,adapt(to,x.locate),x.map,x.scale)
-
-"""
-    ParametricBody(surf,uv_bounds;step,t⁰,T,mem,map) <: AbstractBody
-
-Creates a `ParametricBody` with `locate=HashedLocator(surf,uv_bounds...)`.
-"""
-ParametricBody(surf,uv_bounds::Tuple;step=1,t⁰=0.,T=Float32,mem=Array,map=(x,t)->x) = 
-    adapt(mem,ParametricBody(surf,HashedLocator(surf,uv_bounds;step,t⁰,T,mem);map,T))
-
-update!(body::ParametricBody{T,F,L},t) where {T,F,L<:HashedLocator} = 
-    update!(body.locate,body.surf,t)
-
-using FastGaussQuadrature: gausslegendre
-"""
-    integrate(f(uv),curve;N=64)
-
-integrate a function f(uv) along the curve
-"""
-function _gausslegendre(N,T)
-    x,w = gausslegendre(N)
-    convert.(T,x),convert.(T,w)
-end
-integrate(curve::Function,lims=(0.,1.)) = integrate(ξ->1.0,curve,0.0,lims;N=N)
-function integrate(f::Function,curve::Function,t,lims::NTuple{2,T};N=64) where T
-    # integrate NURBS curve to compute integral
-    uv_, w_ = _gausslegendre(N,T)
-    # map onto the (uv) interval, need a weight scalling
-    scale=(lims[2]-lims[1])/2; uv_=scale*(uv_.+1); w_=scale*w_ 
-    sum([f(uv)*norm(ForwardDiff.derivative(uv->curve(uv,t),uv))*w for (uv,w) in zip(uv_,w_)])
-end
-"""
-    ∮nds(p,body::AbstractParametricBody,t=0)
-
-Surface normal pressure integral along the parametric curve(s)
-"""
-function ∮nds(p::AbstractArray{T},body::ParametricBody,t=0;N=64) where T
-    curve(ξ,τ) = -body.map(-body.surf(ξ,τ),τ)
-    open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
-    integrate(s->_pforce(curve,p,s,t,Val{open}()),curve,t,body.locate.lims;N)
-end
-"""
-    ∮τnds(u,body::AbstractParametricBody,t=0)
-
-Surface normal pressure integral along the parametric curve(s)
-"""
-function ∮τnds(u::AbstractArray{T},body::ParametricBody,t=0;N=64) where T
-    curve(ξ,τ) = -body.map(-body.surf(ξ,τ),τ) # inverse maping
-    vel(ξ) = ForwardDiff.derivative(t->curve(ξ,t),t) # get velocity at coordinate ξ
-    open = !all(body.surf(body.locate.lims[1],t).≈body.surf(body.locate.lims[2],t))
-    integrate(s->_vforce(curve,u,s,t,vel(s),Val{open}()),curve,t,body.locate.lims;N)
-end
-
-# pressure force on a parametric `surf` (closed) at parametric coordinate `s` and time `t`.
-function _pforce(surf,p::AbstractArray{T},s::T,t,::Val{false},δ=1) where T
-    xᵢ = surf(s,t); nᵢ = norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
-    return interp(xᵢ+δ*nᵢ,p).*nᵢ
-end
-function _pforce(surf,p::AbstractArray{T},s::T,t,::Val{true},δ=1) where T
-    xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
-    return (interp(xᵢ+δ*nᵢ,p)-interp(xᵢ-δ*nᵢ,p))*nᵢ
-end
-# viscous force on a parametric `surf` (closed) at parametric coordinate `s` and time `t`.
-function _vforce(surf,u::AbstractArray{T},s::T,t,vᵢ,::Val{false},δ=1) where T
-    xᵢ = surf(s,t); nᵢ = norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
-    vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ # tangential comp
-    uᵢ = interp(xᵢ+δ*nᵢ,u)  # prop in the field
-    uᵢ = uᵢ .- sum(uᵢ.*nᵢ)*nᵢ # tangential comp
-    return (uᵢ.-vᵢ)./δ # FD
-end
-function _vforce(surf,u::AbstractArray{T,N},s::T,t,vᵢ,::Val{true},δ=1) where {T,N}
-    xᵢ = surf(s,t); nᵢ = ParametricBodies.norm_dir(surf,s,t); nᵢ /= √(nᵢ'*nᵢ)
-    τ = zeros(SVector{N-1,T})
-    vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ
-    for j ∈ [-1,1]
-        uᵢ = interp(xᵢ+j*δ*nᵢ,u)
-        uᵢ = uᵢ .- sum(uᵢ.*nᵢ)*nᵢ
-        τ = τ + (uᵢ.-vᵢ)./δ
+    if isfinite(fastd²) && applicable(body.locate,ξ,t,true)
+        d = body.scale*body.locate(ξ,t,true)-body.half_thk
+        d^2>fastd² && return d,zero(x),zero(x)
     end
-    return τ
-end
 
-export AbstractParametricBody,ParametricBody,measure,sdf,∮nds,∮τnds
+    # Locate nearest u, and get vector
+    u = body.locate(ξ,t)
+    p = ξ-body.curve(u,t)
+
+    # Get unit normal 
+    n = notC¹(body.locate,u) ? hat(p) : (s=tangent(body.curve,u,t); body.boundary ? perp(s) : align(p,s))
+    
+    # Get scaled & thinkess adjusted distance and dot(S)
+    return (body.scale*p'*n-body.half_thk,n,body.dotS(u,t))
+end
+notC¹(::Function,u) = false
+
+hat(p) = p/√(eps(eltype(p))+p'*p)
+tangent(curve,u,t) = hat(ForwardDiff.derivative(u->curve(u,t),u))
+align(p,s) = hat(p-(p'*s)*s)
+perp(s::SVector{2}) = SA[s[2],-s[1]]
+
+export AbstractParametricBody,ParametricBody,sdf,measure
+
+abstract type AbstractLocator <:Function end
+export AbstractLocator
+
+include("HashedLocators.jl")
+export HashedBody, HashedLocator, refine, mymod, update!
+
+include("NurbsCurves.jl")
+export NurbsCurve,BSplineCurve,interpNurbs
 
 include("NurbsLocator.jl")
-export NurbsLocator
+export NurbsLocator,DynamicNurbsBody
 
-include("DynamicBodies.jl")
-export DynamicBody,measure
+include("PlanarBodies.jl")
+export PlanarBody
 
 include("Recipes.jl")
 export f
+include("integrals.jl")
 
 # Backward compatibility for extensions
 if !isdefined(Base, :get_extension)
