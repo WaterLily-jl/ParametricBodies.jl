@@ -80,12 +80,12 @@ end
 function inv_cubic(f::F,a,b;tol=√eps(a.x)) where F
     Δ = b.x-a.x
     v = a.∂+b.∂-3(b.f-a.f)/Δ; w = v^2-a.∂*b.∂
-    w < 0 && return a,b      # bust!
-    w = copysign(√w,Δ); q = b.∂-a.∂+2w
-    !(0<(b.∂+w-v)/q<1) && return a,b # bust!
+    w < 0 && return a,b      # fail: co-linear!
+    w = copysign(√w,Δ); q = (b.∂+w-v)/(b.∂-a.∂+2w)
+    !(0<q<1) && return a,b   # fail: outside the bracket!
     margin = max(0.1f0,tol/abs(Δ))
-    c = f(b.x-Δ*clamp((b.∂+w-v)/q,margin,1-margin))
-    c.f > b.f && return a,b  # bust!
+    c = f(b.x-Δ*clamp(q,margin,1-margin))
+    c.f > b.f && return a,b  # fail: regression
     c.f > a.f && return a,c  # save minimizer
     c,(c.∂*Δ<0 ? b : a)      # pick "downhill" bracket
 end
