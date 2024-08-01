@@ -55,24 +55,29 @@ function (l::NurbsLocator{C})(x,t,fast=false;tol=5f-3,∂tol=5l.step,itmx=2degre
     for i in 1:length(l.curve.wgts)-degree
         a = b; b = dis2(uv(i))
         a==b && continue
-        (aᵢ,bᵢ) = a.f<b.f ? (a,b) : (b,a)  # aᵢ is current minimizer
-        uᵢ,vᵢ = inv_cubic(dis2,aᵢ,bᵢ;tol)  # first refinement
-        uᵢ.f<2u.f && for _ in 1:itmx       # requires accurate search
-            (abs(uᵢ.x-vᵢ.x) ≤ 2tol || abs(uᵢ.∂) < ∂tol ||(uᵢ,vᵢ)==(aᵢ,bᵢ)) && break
-            aᵢ,bᵢ = uᵢ,vᵢ
-            uᵢ,vᵢ = inv_cubic(dis2,aᵢ,bᵢ;tol)
-        end
+        uᵢ = davidon(dis2,a,b;fmax=2u.f,tol,∂tol,itmx)
         uᵢ.f<u.f && (u=uᵢ) # Replace current best
     end; u.x               # Return location
 end
-# Inversed Cubic Interpolation minimizer
+# Returns x=argument, f=function value(x) and ∂=df/dx(x) as a named tuple
 using ForwardDiff: Dual,Tag,value,partials
 function fdual(f::F,x::R) where {F<:Function,R<:AbstractFloat}
     T = typeof(Tag(f,R))
     fx = f(Dual{T}(x,one(R)))
     (x=x,f=value(fx),∂=partials(T,fx,1))
 end
-function inv_cubic(f,a,b;tol=√eps(a.x))
+# Inversed Cubic Interpolation minimizer
+davidon(f,a::Number,b::Number;kwargs...) = (ff(x)=fdual(f,x); davidon(ff,ff(a),ff(b);kwargs...).x)
+@inline function davidon(f,a,b;tol=√eps(a.x),∂tol=0,fmax=Inf,itmx=1000)
+    (aᵢ,bᵢ) = a.f<b.f ? (a,b) : (b,a)  # aᵢ is current minimizer
+    uᵢ,vᵢ = inv_cubic(f,aᵢ,bᵢ;tol)     # first refinement
+    uᵢ.f<fmax && for _ in 1:itmx       # requires accurate search
+        (abs(uᵢ.x-vᵢ.x) ≤ 2tol || abs(uᵢ.∂) < ∂tol ||(uᵢ,vᵢ)==(aᵢ,bᵢ)) && break
+        aᵢ,bᵢ = uᵢ,vᵢ
+        uᵢ,vᵢ = inv_cubic(f,aᵢ,bᵢ;tol) # keep refining bracket
+    end; uᵢ # return minimizer
+end
+function inv_cubic(f::F,a,b;tol=√eps(a.x)) where F
     Δ = b.x-a.x
     v = a.∂+b.∂-3(b.f-a.f)/Δ; w = v^2-a.∂*b.∂
     w < 0 && return a,b      # bust!

@@ -1,5 +1,6 @@
 using ParametricBodies
 using StaticArrays,Test
+using CUDA
 
 @testset "ParametricBodies.jl" begin
     curve(θ,t) = SA[cos(θ+t),sin(θ+t)]
@@ -59,6 +60,14 @@ end
     @test d ≈ 0.25
     @test n ≈ SA[-3/5, 4/5] rtol=1e-4
     @test V ≈ SA[-4/5,-3/5] rtol=1e-4
+
+    if CUDA.functional()
+        locator = HashedLocator(curve,(0.,2π),t⁰=t,step=0.25,buffer=1,mem=CuArray)
+        x = [SA_F32[.5,.5],SA_F32[.0,.5]] |> CuArray
+        t = CUDA.zeros(2) 
+        u = locator.(x,t)
+        @test u|>Array ≈ [π/4,π/2]
+    end
 
     # use mapping to double, move and rotate circle
     U=0.1; map(x,t)=SA[cos(t) sin(t); -sin(t) cos(t)]*(x-SA[U*t,0])/2
@@ -139,6 +148,11 @@ end
     @test all(reduce(hcat,nurbs.(s,0.0)).-pnts.<10eps(eltype(pnts)))
 end
 @testset "NurbsLocator.jl" begin
+    # Check davidon minimizer
+    @test davidon(x->(x+3)*(x-1)^2,-2.,2.) ≈ 1
+    @test davidon(x->-log(x)/x,1.,10.) ≈ exp(1)
+    @test davidon(x->cos(x)+cos(3x)/3,0.,1.75π) ≈ π
+
     # define a circle
     T = Float32
     circle = nurbs_circle(T)
@@ -149,6 +163,14 @@ end
     @test locate([5,5],0) ≈ 1/8
     body = ParametricBody(circle,locate)
     @test [measure(body,SA[5,5],0)...]≈[5√2-5,[√2/2,√2/2],[0,0]] rtol=1e-6
+
+    # Check GPU locating
+    if CUDA.functional()
+        x = [SA{T}[5,5],SA{T}[0,5]] |> CuArray
+        t = CUDA.zeros(2) 
+        u = locate.(x,t)
+        @test u|>Array ≈ [1/8,1/4]
+    end
 
     # Test fast measure
     @test locate.C≈[0,0]
@@ -203,7 +225,7 @@ end
     @test [measure(body,SA[0,8,2],0)...]≈[9/2-√3/2,[0,1,0],[0,0,0]] rtol=1e-6
     @test [measure(body,SA[3,2,2],0)...]≈[2-√3/2,[1,0,0],[0,0,0]] rtol=1e-6
 end
-using CUDA,WaterLily
+using WaterLily
 @testset "WaterLily" begin
     function circle_sim(nurbslocate=true,mem=Array,T=Float32)
         circle = nurbs_circle(T)

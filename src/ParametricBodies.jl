@@ -110,7 +110,7 @@ include("NurbsCurves.jl")
 export NurbsCurve,BSplineCurve,interpNurbs
 
 include("NurbsLocator.jl")
-export NurbsLocator,DynamicNurbsBody
+export NurbsLocator,davidon,DynamicNurbsBody
 
 include("PlanarBodies.jl")
 export PlanarBody
