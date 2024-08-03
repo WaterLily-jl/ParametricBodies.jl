@@ -1,22 +1,17 @@
 """
-    NurbsLocator
-
-    - `curve<:NurbsCurve` NURBS defined curve
-    - `step<:Real` buffer size around control points
-    - `C¹end::Bool` check if the curve is closed and C¹
+    NurbsLocator(curve::NurbsCurve)
 
 NURBS-specific locator function. Loops through the spline sections, locating points accurately 
-(using inverse cubic interpolation) only if it's possible for that to be the closest section.
+using inverse cubic interpolation if it's possible for that to be the closest section.
 """
-struct NurbsLocator{C<:NurbsCurve,T<:Number,S<:SVector} <: AbstractLocator
+struct NurbsLocator{C<:NurbsCurve,S<:SVector} <: AbstractLocator
     curve::C
-    step::T
     C¹end::Bool
     C::S
     R::S
 end
 
-function NurbsLocator(curve::NurbsCurve;step=1,t=0.)
+function NurbsLocator(curve::NurbsCurve;t=0.)
     # Check ends
     low,high = first(curve.knots),last(curve.knots)
     c(u) = curve(u,t); dc(u) = ForwardDiff.derivative(c,u)
@@ -24,11 +19,11 @@ function NurbsLocator(curve::NurbsCurve;step=1,t=0.)
     # Control-point bounding box 
     ex = extrema(curve.pnts,dims=2)
     low,high = SVector(first.(ex)),SVector(last.(ex))
-    NurbsLocator(curve,step,C¹end,0.5f0*(low+high),0.5f0(high-low))
+    NurbsLocator(curve,C¹end,0.5f0*(low+high),0.5f0(high-low))
 end
-Adapt.adapt_structure(to, x::NurbsLocator) = NurbsLocator(x.curve,x.step,x.C¹end,x.C,x.R)
+Adapt.adapt_structure(to, x::NurbsLocator) = NurbsLocator(x.curve,x.C¹end,x.C,x.R)
 
-update!(l::NurbsLocator,curve,t) = l=NurbsLocator(curve,step=l.step;t) # just make a new locator
+update!(l::NurbsLocator,curve,t) = l=NurbsLocator(curve;t) # just make a new locator
 
 function notC¹(l::NurbsLocator{C},uv) where C<:NurbsCurve{n,d} where {n,d}
     d==1 && return any(uv.≈l.curve.knots) # straight line spline is not C¹ at any knot
@@ -42,7 +37,7 @@ end
 Estimate the parameter value `u⁺ = argmin_u (x-curve(u,t))²` for a NURBS by looping through the 
 spline segments.
 """
-function (l::NurbsLocator{C})(x,t,fast=false;tol=5f-3,∂tol=5l.step,itmx=2degree) where C<:NurbsCurve{n,degree} where {n,degree}
+function (l::NurbsLocator{C})(x,t,fast=false;tol=5f-3,itmx=2degree) where C<:NurbsCurve{n,degree} where {n,degree}
     fast && return √sum(abs2,max.(0,abs.(x-l.C)-l.R))
     degree==1 && return lin_loc(l,x,t)
 
@@ -55,7 +50,7 @@ function (l::NurbsLocator{C})(x,t,fast=false;tol=5f-3,∂tol=5l.step,itmx=2degre
     for i in 1:length(l.curve.wgts)-degree
         a = b; b = dis2(uv(i))
         a==b && continue
-        uᵢ = davidon(dis2,a,b;fmax=2u.f,tol,∂tol,itmx)
+        uᵢ = davidon(dis2,a,b;fmax=2u.f,tol,itmx)
         uᵢ.f<u.f && (u=uᵢ) # Replace current best
     end; u.x               # Return location
 end
@@ -68,21 +63,21 @@ function fdual(f::F,x::R) where {F<:Function,R<:AbstractFloat}
 end
 # Inversed Cubic Interpolation minimizer
 davidon(f,a::Number,b::Number;kwargs...) = (ff(x)=fdual(f,x); davidon(ff,ff(a),ff(b);kwargs...).x)
-@inline function davidon(f,a,b;tol=√eps(a.x),∂tol=0,fmax=Inf,itmx=1000)
-    (aᵢ,bᵢ) = a.f<b.f ? (a,b) : (b,a)  # aᵢ is current minimizer
-    uᵢ,vᵢ = inv_cubic(f,aᵢ,bᵢ;tol)     # first refinement
-    uᵢ.f<fmax && for _ in 1:itmx       # requires accurate search
-        (abs(uᵢ.x-vᵢ.x) ≤ 2tol || abs(uᵢ.∂) < ∂tol ||(uᵢ,vᵢ)==(aᵢ,bᵢ)) && break
-        aᵢ,bᵢ = uᵢ,vᵢ
-        uᵢ,vᵢ = inv_cubic(f,aᵢ,bᵢ;tol) # keep refining bracket
-    end; uᵢ # return minimizer
+@inline function davidon(f,a,b;tol=√eps(typeof(a.x)),∂tol=0,fmax=Inf,itmx=1000)
+    (a,b) = a.f<b.f ? (a,b) : (b,a)  # aᵢ is current minimizer
+    u,v = inv_cubic(f,a,b,tol)     # first refinement
+    u.f<fmax && for _ in 1:itmx       # requires accurate search
+        (abs(u.x-v.x) ≤ 2tol || abs(u.∂) ≤ ∂tol ||(u,v)==(a,b)) && break
+        a,b = u,v
+        u,v = inv_cubic(f,a,b,tol) # keep refining bracket
+    end; u # return minimizer
 end
-function inv_cubic(f::F,a,b;tol=√eps(a.x)) where F
+function inv_cubic(f::F,a,b,tol) where F
     Δ = b.x-a.x
     v = a.∂+b.∂-3(b.f-a.f)/Δ; w = v^2-a.∂*b.∂
-    w < 0 && return a,b      # fail: co-linear!
+    w < tol && return a,b    # done: co-linear!
     w = copysign(√w,Δ); q = (b.∂+w-v)/(b.∂-a.∂+2w)
-    !(0<q<1) && return a,b   # fail: outside the bracket!
+    !(0<q<1) && return a,b   # done: outside the bracket!
     margin = max(0.1f0,tol/abs(Δ))
     c = f(b.x-Δ*clamp(q,margin,1-margin))
     c.f > b.f && return a,b  # fail: regression
@@ -109,7 +104,7 @@ end
 
 Creates a `ParametricBody` with `locate=NurbsLocator`.
 """
-ParametricBody(curve::NurbsCurve;step=1,T=eltype(curve.pnts),kwargs...) = ParametricBody(curve,NurbsLocator(curve;step);T,kwargs...)
+ParametricBody(curve::NurbsCurve;T=eltype(curve.pnts),kwargs...) = ParametricBody(curve,NurbsLocator(curve);T,kwargs...)
 
 """
     DynamicNurbsBody(curve::NurbsCurve;kwargs...)
@@ -125,6 +120,6 @@ end
 function update!(body::ParametricBody{T,L,S},uⁿ::AbstractArray{T},vⁿ::AbstractArray{T}) where {T,L<:NurbsLocator,S<:NurbsCurve}
     curve = NurbsCurve(uⁿ,body.curve.knots,body.curve.wgts)
     dotS = NurbsCurve(vⁿ,body.curve.knots,body.curve.wgts)
-    ParametricBody(curve,dotS,NurbsLocator(curve,step=body.locate.step),body.map,body.scale,body.half_thk,body.boundary)
+    ParametricBody(curve,dotS,NurbsLocator(curve),body.map,body.scale,body.half_thk,body.boundary)
 end
 update!(body::ParametricBody,uⁿ::AbstractArray,Δt::Number) = update!(body,uⁿ,(uⁿ-copy(body.curve.pnts))/Δt)
