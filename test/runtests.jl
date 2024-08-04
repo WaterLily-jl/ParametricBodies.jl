@@ -198,6 +198,17 @@ end
     circle3 = NurbsCurve(cps3,circle.knots,circle.wgts)
     body3 = ParametricBody(circle3,boundary=false,thk=2)
     @test [measure(body3,SA[3.,4.,2.],0.)...]≈[1,[0,0,1],[0,0,0]]
+
+    # Check GPU
+    if CUDA.functional()
+        x = [SA_F32[3,4,2],SA_F32[5,5,0]] |> CuArray
+        t = CUDA.zeros(2)
+        u = body3.locate.(x,t)
+        @test u|>Array ≈ [atan(4,3)/2π,1/8] atol=5e-3
+        a,b = measure.(Ref(body3),x,t) |> Array
+        @test all(a .≈ (1,[0,0,1],[0,0,0]))
+        @test all(b .≈ (5√2-6,[√2/2,√2/2,0],[0,0,0]))
+    end
 end
 @testset "Extruded Bodies" begin
     circle = nurbs_circle(Float32,7)
