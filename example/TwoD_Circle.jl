@@ -20,7 +20,7 @@ end
 sim = circle()
 
 # set -up simulations time and time-step for ploting
-t₀,duration,tstep = round(sim_time(sim)), 1, 0.1
+t₀,duration,tstep = round(sim_time(sim)), 10, 0.1
 
 # storage
 pforce,vforce,pmom = [],[],[]
@@ -44,5 +44,5 @@ pforce,vforce,pmom = [],[],[]
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
 end
-plot(range(t₀,t₀+duration;step=tstep),2pforce/sim.L,label="pressure",xlabel="tU/L",ylabel="force")
-plot!(range(t₀,t₀+duration;step=tstep),2vforce/sim.L,label="viscous")
+# plot(range(t₀,t₀+duration;step=tstep),2pforce/sim.L,label="pressure",xlabel="tU/L",ylabel="force")
+# plot!(range(t₀,t₀+duration;step=tstep),2vforce/sim.L,label="viscous")

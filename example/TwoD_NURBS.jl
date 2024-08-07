@@ -24,15 +24,15 @@ sim = dynamicSpline()#mem=CuArray);
 t₀,duration,tstep = sim_time(sim),10,0.1;
 
 # run
-anim = @animate for tᵢ in range(t₀,t₀+duration;step=tstep)
+@gif for tᵢ in range(t₀,t₀+duration;step=tstep)
 
     # update until time tᵢ in the background
     t = sum(sim.flow.Δt[1:end-1])
     while t < tᵢ*sim.L/sim.U
         # random update
-        # new_pnts = (SA[-1     0   1
-                        # 0.5 0.25+0.5*sin(π/4*t/sim.L) 0] .+ [2,3])*sim.L
-        # sim.body = update!(sim.body,new_pnts,sim.flow.Δt[end])
+        new_pnts = (SA[-1     0   1
+                        0.5 0.25+0.5*sin(π/4*t/sim.L) 0] .+ [2,3])*sim.L
+        sim.body = update!(sim.body,new_pnts,sim.flow.Δt[end])
         measure!(sim,t)
         mom_step!(sim.flow,sim.pois) # evolve Flow
         t += sim.flow.Δt[end]
@@ -48,5 +48,3 @@ anim = @animate for tᵢ in range(t₀,t₀+duration;step=tstep)
     # print time step
     println("tU/L=",round(tᵢ,digits=4),", Δt=",round(sim.flow.Δt[end],digits=3))
 end
-# save gif
-gif(anim, "DynamicBody_flow.gif", fps=24)

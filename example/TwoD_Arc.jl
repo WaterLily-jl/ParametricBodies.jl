@@ -1,7 +1,7 @@
 using WaterLily
 using ParametricBodies
 using StaticArrays
-include("../../WaterLily/examples/TwoD_plots.jl")
+include("viz.jl")
 function arc_sim(R = 64, α = π/16, U=1, Re=100)
     curve(θ,t) = SA[cos(θ),sin(θ)] # ξ-space: angle=0,center=0,radius=1
     Rotate = SA[cos(α) -sin(α); sin(α) cos(α)]
