@@ -3,7 +3,7 @@
 Tutorial video [![tutorial video link](https://img.youtube.com/vi/6PmJJKVOfvc/hqdefault.jpg)](https://www.youtube.com/watch?v=6PmJJKVOfvc)
 
 
-This package to enable working with parametrically defined shapes in [WaterLily](https://github.com/weymouth/WaterLily.jl). You can add this package via the Julia package manager
+This package to enable working with parametrically defined shapes in [WaterLily](https://github.com/WaterLily-jl/WaterLily.jl). You can add this package via the Julia package manager
 ```
 ] add ParametricBodies
 using ParametricBodies
@@ -136,3 +136,17 @@ dt,dx = 0.1,0.1                  # time step and uniform displacement
 new_pnts = circle.pnts .+ dx     # define updated control points
 body = update!(body,new_pnts,Δt) # new body will have unit velocity (dx/dt=1)
 ```
+
+### Examples
+
+We provide some simple examples in the `examples` folder.
+
+- [The flow around a 2D circle defined from a NURBS curve.](example/TwoD_Circle.jl) 
+- [The flow around a 2D arc](example/TwoD_Arc.jl)
+- [The flow around a 2D ellipse defined by its parametric equation](example/TwoD_Ellipse.jl)
+- [The flow around a 2D general NURBS with time-varying control points](example/TwoD_NURBS.jl)
+- [The flow around a 3D general NURBS with time-varying control points](example/ThreeD_NURBS.jl)
+- [The flow around a vertical axis wind turbine blade in a spanwise periodic domain](example/ThreeD_RotatingBladeSpanperiodic.jl)
+
+
+![Tandem airfoil](example/Tandem_airfoil.gif)

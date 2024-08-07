@@ -40,6 +40,10 @@ for tᵢ in range(t₀,t₀+duration;step=tstep)
     # update until time tᵢ in the background
     t = sum(sim.flow.Δt[1:end-1])
     while t < tᵢ*sim.L/sim.U
+        δx = SA[-1   0   1
+                0.5 0.25 0
+                0 0.08sin(2π*t/sim.L) 0.2sin(2π*t/sim.L)]*sim.L .+ [2sim.L,3sim.L,8]
+        sim.body = update!(sim.body,δx,sim.flow.Δt[end])
         # random update
         measure!(sim,t)
         mom_step!(sim.flow,sim.pois) # evolve Flow

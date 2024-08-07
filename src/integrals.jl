@@ -8,8 +8,9 @@ end
 
 integrate a function f(uv) along the curve
 """
-integrate(crv::Function) = integrate(ξ->1.0,crv,0;N=N)
+integrate(crv::Function,lims;N=16) = integrate(ξ->1.0,crv,0,lims;N)
 function integrate(f::Function,crv::Function,t,lims;N=64)
+    @assert length(crv(first(lims),t))==2 "integrate(..) can only be used for 2D curves"
     # integrate NURBS curve to compute integral
     uv_, w_ = _gausslegendre(N,typeof(first(lims)))
     # map onto the (uv) interval, need a weight scalling
@@ -52,23 +53,23 @@ end
 
 perp(curve,u,t) = perp(tangent(curve,u,t))
 # pressure force on a parametric `curve` (closed) at parametric coordinate `s` and time `t`.
-function _pforce(crv,p::AbstractArray{T},s::T,t,::Val{false};δ=1) where T
+function _pforce(crv,p::AbstractArray,s,t,::Val{false};δ=1)
     xᵢ = crv(s,t); nᵢ = perp(crv,s,t); nᵢ /= √(nᵢ'*nᵢ)
     return interp(xᵢ+δ*nᵢ,p).*nᵢ
 end
-function _pforce(crv,p::AbstractArray{T},s::T,t,::Val{true};δ=1) where T
+function _pforce(crv,p::AbstractArray,s,t,::Val{true};δ=1)
     xᵢ = crv(s,t); nᵢ = ParametricBodies.perp(crv,s,t); nᵢ /= √(nᵢ'*nᵢ)
     return (interp(xᵢ+δ*nᵢ,p)-interp(xᵢ-δ*nᵢ,p))*nᵢ
 end
 # viscous force on a parametric `curve` (closed) at parametric coordinate `s` and time `t`.
-function _vforce(crv,u::AbstractArray{T},s::T,t,vᵢ,::Val{false};δ=1) where T
+function _vforce(crv,u::AbstractArray,s,t,vᵢ,::Val{false};δ=1)
     xᵢ = crv(s,t); nᵢ = perp(crv,s,t); nᵢ /= √(nᵢ'*nᵢ)
     vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ # tangential comp
     uᵢ = interp(xᵢ+δ*nᵢ,u)  # prop in the field
     uᵢ = uᵢ .- sum(uᵢ.*nᵢ)*nᵢ # tangential comp
     return (uᵢ.-vᵢ)./δ # FD
 end
-function _vforce(crv,u::AbstractArray{T,N},s::T,t,vᵢ,::Val{true};δ=1) where {T,N}
+function _vforce(crv,u::AbstractArray{T,N},s,t,vᵢ,::Val{true};δ=1) where {T,N}
     xᵢ = crv(s,t); nᵢ = perp(crv,s,t); nᵢ /= √(nᵢ'*nᵢ)
     τ = zeros(SVector{N-1,T})
     vᵢ = vᵢ .- sum(vᵢ.*nᵢ)*nᵢ
