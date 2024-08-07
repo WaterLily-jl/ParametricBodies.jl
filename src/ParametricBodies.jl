@@ -97,6 +97,7 @@ hat(p) = p/√(eps(eltype(p))+p'*p)
 tangent(curve,u,t) = hat(ForwardDiff.derivative(u->curve(u,t),u))
 align(p,s) = hat(p-(p'*s)*s)
 perp(s::SVector{2}) = SA[s[2],-s[1]]
+perp(s) = s # should never be used!
 
 export AbstractParametricBody,ParametricBody,sdf,measure
 
@@ -110,7 +111,7 @@ include("NurbsCurves.jl")
 export NurbsCurve,BSplineCurve,interpNurbs
 
 include("NurbsLocator.jl")
-export NurbsLocator,DynamicNurbsBody
+export NurbsLocator,davidon,DynamicNurbsBody
 
 include("PlanarBodies.jl")
 export PlanarBody

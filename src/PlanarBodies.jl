@@ -29,9 +29,7 @@ function PlanarBody(curve::NurbsCurve;map=dmap,T=eltype(curve.pnts),thk=T(√3+2
     wmap(x::SVector{n,X},t::T) where {n,X,T} = SVector{n,promote_type(X,T)}(map(x,t))
 
     scale = T(ParametricBodies.get_scale(map,SA{T}[0,0,0]))
-    locate = NurbsLocator(curve;step=inv(scale))
-    planform = ParametricBody(curve,locate)
-    PlanarBody(planform,wmap,scale,T(thk/2))
+    PlanarBody(ParametricBody(curve),wmap,scale,T(thk/2))
 end
 
 function curve_props(body::PlanarBody{T},x::SVector{3},t;fastd²=Inf) where T

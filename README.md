@@ -3,7 +3,7 @@
 Tutorial video [![tutorial video link](https://img.youtube.com/vi/6PmJJKVOfvc/hqdefault.jpg)](https://www.youtube.com/watch?v=6PmJJKVOfvc)
 
 
-This pacakge to enable working with parametrically defined shapes in [WaterLily](https://github.com/weymouth/WaterLily.jl). You can add this package via the Julia package manager
+This package to enable working with parametrically defined shapes in [WaterLily](https://github.com/weymouth/WaterLily.jl). You can add this package via the Julia package manager
 ```
 ] add ParametricBodies
 using ParametricBodies
@@ -40,6 +40,7 @@ A 3D curve can't define the boundary of a 3D volume (that would require a surfac
 
 A `HashedLocator` struct has been defined to automate locating the closest point on a supplied 2D curve. 
 ```julia
+curve(θ,t) = SA[cos(θ),sin(θ)]
 lims = (0.,2π) # limits of the parametric function
 locator = HashedLocator(curve,lims,step=0.25)
 body = ParametricBody(curve,locate)
@@ -48,7 +49,9 @@ or the convience constructor
 ```julia
 body = HashedBody(curve,(0.,2π),step=0.25)
 ```
-This locator function samples the curve over the supplied parametric limits and uses a Newton root finding method to locate the parameter value. A 2D array of parameter data (a hash table) is used to supply a good initial guess to the Newton solver. This hash must be updated if the curve is time-varying, and must be stored in a GPU array when computing on the GPU. See the example folder. The `HashedLocator` is currently only available for 2D curves, although it can be used with mapping and `PlanarBodies`, to define bodies for 3D simulations, see below.
+This locator function samples the curve over the supplied parametric limits and uses a Newton root finding method to locate the parameter value. A 2D array of parameter data (a hash table) is used to supply a good initial guess to the Newton solver. 
+
+Note that a `HashedLocator` knows nothing about the details of the `curve`, and you must test it's accuracy before using it in a WaterLily simulation. Also, the hash must be updated if the curve is time-varying, and must be stored in a GPU array when computing on the GPU. See the example folder. The `HashedLocator` is currently only available for 2D curves, although it can be used with mapping and `PlanarBodies`, to define bodies for 3D simulations, see below.
 
 ### NurbsCurve & Locator
 
@@ -59,7 +62,7 @@ pnts = SA[0. 3. -1. -4  -4.
 nurbs = interpNurbs(pnts;p=3) # fit a cubic NurbsCurve through the points
 body = ParametricBody(nurbs)
 ```
-An efficient (and hash-free) `NurbsLocator` is created automatically for `NurbsCurve`s. 
+An efficient and accurate `NurbsLocator` is created automatically for `NurbsCurve`s. However, it is not as fast as a `HashedLocator`. If speed is a limiting factor, you can always use `body = HashedBody(nurbs,(0,1))` to create a fast locator, although it may not be as accurate.
 
 You can also create a NURBS by supplying the control points, knots and weights directly. For example, the code below defines a 3D torus using a NURBS to describe the major circle of radius 7, and thickening the space-curve with a minor radius of 1.
 ```julia
