@@ -130,7 +130,7 @@ spinning_body = ParametricBody(curve,locate)
 If you are using a `HashedLocator` for a dynamic curve you will need to call `update!(body,t)` frequently (probably every time step of the simulation) so that the initial guess of the locator reflects the correct position of the body.
 
 We supply a special function `DynamicNurbsBody` for dynamics NURBS which defines a second spline for the velocity. This function also requires calling `update!(body,...)`, but in this case, the control points for both the position and velocity are updated. Here's an example
-```
+```julia
 body = DynamicNurbsBody(circle)
 dt,dx = 0.1,0.1                  # time step and uniform displacement
 new_pnts = circle.pnts .+ dx     # define updated control points
