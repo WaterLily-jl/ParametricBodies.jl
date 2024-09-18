@@ -27,7 +27,7 @@ open(b::ParametricBody{T,L};t=0) where {T,L<:NurbsLocator} = Val{(!all(b.curve(f
 open(b::ParametricBody{T,L};t=0) where {T,L<:HashedLocator} = Val{(all(b.curve(first(b.locate.lims),t).≈b.curve(last(b.locate.lims),t)))}()
 lims(b::ParametricBody{T,L};t=0) where {T,L<:NurbsLocator} = (first(b.curve.knots),last(b.curve.knots))
 lims(b::ParametricBody{T,L};t=0) where {T,L<:HashedLocator} = b.locate.lims
-function pressure_force(p,df,body::ParametricBody,t=0,T=promote_type(Float64,eltype(p));N=64)
+function parametric_pressure_force(p,df,body::ParametricBody,t=0,T=promote_type(Float64,eltype(p));N=64)
     curve(ξ,τ) = -body.map(-body.curve(ξ,τ),τ) # inverse maping
     -one(T)*integrate(s->_pforce(curve,p,s,t,open(body)),curve,t,lims(body);N)
 end
@@ -36,7 +36,7 @@ end
 
 Surface normal pressure integral along the parametric curve(s)
 """
-function viscous_force(u,ν,df,body::ParametricBody,t=0,T=promote_type(Float64,eltype(u));N=64)
+function parametric_viscous_force(u,ν,df,body::ParametricBody,t=0,T=promote_type(Float64,eltype(u));N=64)
     curve(ξ,τ) = -body.map(-body.curve(ξ,τ),τ) # inverse maping
     ν*integrate(s->_vforce(curve,u,s,t,body.dotS(s,t),open(body)),curve,t,lims(body);N)
 end
@@ -46,7 +46,7 @@ using LinearAlgebra: cross
 
 Surface normal pressure moment integral along the parametric curve(s)
 """
-function pressure_moment(x₀,p,df,body::ParametricBody,t=0,T=promote_type(Float64,eltype(p));N=64)
+function parametric_pressure_moment(x₀,p,df,body::ParametricBody,t=0,T=promote_type(Float64,eltype(p));N=64)
     curve(ξ,τ) = -body.map(-body.curve(ξ,τ),τ) # inverse maping
     -one(T)*integrate(s->cross(curve(s,t)-x₀,_pforce(curve,p,s,t,open(body))),curve,t,lims(body);N)
 end
