@@ -24,7 +24,7 @@ import WaterLily: pressure_force,viscous_force,pressure_moment
 Surface normal pressure integral along the parametric curve(s)
 """
 open(b::ParametricBody{T,L};t=0) where {T,L<:NurbsLocator} = Val{(!all(b.curve(first(b.curve.knots),t).≈b.curve(last(b.curve.knots),t)))}()
-open(b::ParametricBody{T,L};t=0) where {T,L<:HashedLocator} = Val{(all(b.curve(first(b.locate.lims),t).≈b.curve(last(b.locate.lims),t)))}()
+open(b::ParametricBody{T,L};t=0) where {T,L<:HashedLocator} = Val{(!all(b.curve(first(b.locate.lims),t).≈b.curve(last(b.locate.lims),t)))}()
 lims(b::ParametricBody{T,L};t=0) where {T,L<:NurbsLocator} = (first(b.curve.knots),last(b.curve.knots))
 lims(b::ParametricBody{T,L};t=0) where {T,L<:HashedLocator} = b.locate.lims
 function pressure_force(p,df,body::ParametricBody,t=0,T=promote_type(Float64,eltype(p));N=64)
