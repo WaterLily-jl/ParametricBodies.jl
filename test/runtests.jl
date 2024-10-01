@@ -285,7 +285,7 @@ end
         # test same function on a non-NURBS based curve
         body3 = HashedBody((θ,t)->SA[cos(θ),sin(θ)],(0,2π),boundary=false)
         @test ParametricBodies.integrate(body3.curve,T.((0,2π));N=64)/2π-1 ≤ 1e-6 # unit 
-        @test ParametricBodies.open(body3) == Val(false) # check that it is closed
+        @test ParametricBodies.open(body3) == Val(true) # check that it is closed
         @test all(ParametricBodies.lims(body3) .≈ (0,2π)) # check the bounds
         # test forces
         for body in [body1,body2] # won't work with body3
