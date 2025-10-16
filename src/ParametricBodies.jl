@@ -7,7 +7,7 @@ import Base: \
 @inline function (\)(a::SMatrix{2,3}, b::SVector{2})
     # columns of a'
     a1,a2 = a[1,:],a[2,:]
-    
+
     # Q,R decomposition
     r11 = norm(a1)
     q1 = a1/r11
@@ -20,7 +20,7 @@ import Base: \
     v1 = b[1]/r11
     v2 = (b[2]-r12*v1)/r22
 
-    # return solution x = Qv 
+    # return solution x = Qv
     return q1*v1+q2*v2
 end
 
@@ -30,7 +30,7 @@ abstract type AbstractParametricBody <: AbstractBody end
 """
     d,n,V = measure(body::AbstractParametricBody,x,t)
 
-Determine the geometric properties of the body at time `t` closest to 
+Determine the geometric properties of the body at time `t` closest to
 point `x`. Both `dot(curve)` and `dot(map)` contribute to `V` if defined.
 """
 function measure(body::AbstractParametricBody,x,t;fastd²=Inf)
@@ -55,14 +55,14 @@ sdf(body::AbstractParametricBody,x,t;kwargs...) = curve_props(body,x,t;kwargs...
     ParametricBody{T::Real}(curve,locate) <: AbstractBody
 
     - `curve(u,t)` parametrically defined curve
-    - `dotS(u,t)=derivative(t->curve(u,t),t)` time derivative of curve 
+    - `dotS(u,t)=derivative(t->curve(u,t),t)` time derivative of curve
     - `locate(ξ,t)` method to find nearest parameter `u` to `ξ`
     - `map(x,t)=x` mapping from `x` to `ξ`
     - `thk=0` thickness offset for the signed distance
     - `boundary=true` if the curve represent a body boundary, not a space-curve
 
-Explicitly defines a geometry by an unsteady parametric curve. The curve is currently limited 
-to be univariate, and must wind counter-clockwise if closed. The optional `dotS`, `map`, 
+Explicitly defines a geometry by an unsteady parametric curve. The curve is currently limited
+to be univariate, and must wind counter-clockwise if closed. The optional `dotS`, `map`,
 `thk` and `boundary` parameters allow for more general geometry embeddings.
 
 Example:
@@ -85,7 +85,7 @@ struct ParametricBody{T,L<:Function,S<:Function,dS<:Function,M<:Function,dT<:Fun
     map::M      #ξ = map(x,t)
     scale::T    #|dx/dξ| = scale
     half_thk::dT #half thickness
-    boundary::Bool 
+    boundary::Bool
 end
 # Default functions
 import LinearAlgebra: det
@@ -110,7 +110,7 @@ function curve_props(body::ParametricBody,x,t;fastd²=Inf)
     u = body.locate(ξ,t)
     p = ξ-body.curve(u,t)
 
-    # Get unit normal 
+    # Get unit normal
     n = notC¹(body.locate,u) ? hat(p) : (s=tangent(body.curve,u,t); body.boundary ? perp(s) : align(p,s))
 
     # Get scaled & thinkess adjusted distance and dot(S)
