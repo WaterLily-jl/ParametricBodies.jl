@@ -8,15 +8,15 @@ using Adapt,KernelAbstractions
     - `lower::SVector{2,T}:` bottom corner of the hash in ξ-space
     - `step::T:` ξ-resolution of the hash
 
-Type to preform efficient and fairly stable `locate`ing on parametric curves. Root=finding can be very 
-unstable for general parametric curves. This is mitigated by supplying a close initial `uv` guess by 
+Type to preform efficient and fairly stable `locate`ing on parametric curves. Root=finding can be very
+unstable for general parametric curves. This is mitigated by supplying a close initial `uv` guess by
 interpolating `hash` before calling `refine`.
 
 ----
 
     HashedLocator(curve,lims;t⁰=0,step=1,buffer=2,T=Float32,mem=Array)
 
-Creates HashedLocator by sampling the curve and finding the bounding box. This box is expanded by the amount `buffer`. 
+Creates HashedLocator by sampling the curve and finding the bounding box. This box is expanded by the amount `buffer`.
 The hash array is allocated to span the box with resolution `step` and initialized using `update!(::,curve,t⁰,samples)`.
 
 Example:
@@ -86,7 +86,7 @@ update!(l::HashedLocator,curve,t,samples=l.lims)=(_update!(get_backend(l.hash),6
         dᵢ = dis2(uvᵢ)
         dᵢ<d && (uv=uvᵢ; d=dᵢ)
     end
-    
+
     # Refine estimate once
     l.hash[I] = l.refine(uv,x,t;itmx=1)
 end
@@ -103,7 +103,7 @@ function (l::HashedLocator)(x,t;fastd²=Inf)
     hash_index = (x-l.lower)/l.step .+ 1
     clamped = clamp.(hash_index,1,size(l.hash))
 
-    # Get hashed parameter 
+    # Get hashed parameter
     uv = l.hash[round.(Int,clamped)...]
 
     # Return it if index is outside domain. Otherwise, refine estimate
@@ -118,10 +118,9 @@ Creates a `ParametericBody` with `locate=HashedLocator(curve,lims...)`.
 function HashedBody(curve,lims::Tuple;T=Float32,map=dmap,kwargs...)
     # Wrap in type safe functions (GPUs are picky)
     wcurve(u::U,t::T) where {U,T} = SVector{2,promote_type(U,T)}(curve(u,t))
-    wmap(x::SVector{n,X},t::T) where {n,X,T} = SVector{n,promote_type(X,T)}(map(x,t))
 
     locate = HashedLocator(wcurve,T.(lims);T,kwargs...)
-    ParametricBody(wcurve,locate;map=wmap,T,kwargs...)
+    ParametricBody(wcurve,locate;map=map,T,kwargs...)
 end
 Adapt.adapt_structure(to, x::ParametricBody{T,L}) where {T,L<:HashedLocator} =
     ParametricBody(x.curve,x.dotS,adapt(to,x.locate),x.map,x.scale,x.half_thk,x.boundary)

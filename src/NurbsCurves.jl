@@ -6,7 +6,7 @@ using StaticArrays
 Define a non-uniform rational B-spline curve.
 - `pnts`: A 2D array representing the control points of the NURBS curve
 - `knots`: A 1D array of th knot vector of the NURBS curve
-- `wgts`: A 1D array of the wight of the pnts of the NURBS curve 
+- `wgts`: A 1D array of the wight of the pnts of the NURBS curve
 - `d`: The degree of the NURBS curve
 - `n`: the spacial dimension of the NURBS curve, n ∈ {2,3}
 """
@@ -76,11 +76,11 @@ end
 """
     interpNurbs(pnts{D,n};p=n-1)
 
-Given a `SMatrix{D ∈ [2,3],n}` of points, fits a `NurbsCurve{D,n}` of degree `p` to 
+Given a `SMatrix{D ∈ [2,3],n}` of points, fits a `NurbsCurve{D,n}` of degree `p` to
 this set of points. By default the highest degrees NURBS is constructed.
 """
 function interpNurbs(pnts::SMatrix{D,n,T};p=n-1) where {D,n,T}
-    @assert p <= n - 1 "Invalid interpolation: the degree should be less than the number of control points minus 1."    
+    @assert p <= n - 1 "Invalid interpolation: the degree should be less than the number of control points minus 1."
     # construct the parameter and the knot vector
     s = _u(pnts)
     knot = SA{T}[[zeros(p+1); [sum(s[j:j+p-1])/p for j ∈ p-1:n-p]; ones(p+1)]...]
