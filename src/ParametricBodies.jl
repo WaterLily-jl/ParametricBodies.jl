@@ -1,7 +1,7 @@
 module ParametricBodies
 
 using StaticArrays,ForwardDiff
-import WaterLily: AbstractBody,measure,sdf,interp,RigidMap,velocity
+import WaterLily: AbstractBody,measure,sdf,velocity
 
 abstract type AbstractParametricBody <: AbstractBody end
 """
@@ -11,22 +11,14 @@ Determine the geometric properties of the body at time `t` closest to
 point `x`. Both `dot(curve)` and `dot(map)` contribute to `V` if defined.
 """
 function measure(body::AbstractParametricBody,x,t;fastd²=Inf)
-    # curve props and velocity in ξ-frame
+    # Get curve props and check for fast exit
     d,n,dotS = curve_props(body,x,t;fastd²)
     d^2 > fastd² && return d,zero(x),zero(x)
-    # if we are close, measure everything
-    return (d,normal_velocity(body.map,n/body.scale,dotS,x,t)...)
-end
-# For generic map
-function normal_velocity(map::Function,n,dotS,x,t)
-    dξdt = dotS-ForwardDiff.derivative(t->body.map(x,t),t)
+
     # Convert to x-frame with dξ/dx⁻¹ (d has already been scaled)
     dξdx = ForwardDiff.jacobian(x->body.map(x,t),x)
-    return dξdx\n,dξdx\dξdt
+    return (d, dξdx\n/body.scale, dξdx\dotS + velocity(body.map,x,t))
 end
-# for RigidMap
-normal_velocity(map::RigidMap,n,dotS,x,t) = n,dotS+velocity(map,x,t)
-
 """
     d = sdf(body::AbstractParametricBody,x,t)
 
