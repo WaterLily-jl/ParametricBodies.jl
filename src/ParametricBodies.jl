@@ -11,13 +11,14 @@ Determine the geometric properties of the body at time `t` closest to
 point `x`. Both `dot(curve)` and `dot(map)` contribute to `V` if defined.
 """
 function measure(body::AbstractParametricBody,x,t;fastd²=Inf)
-    # Get curve props and check for fast exit
+    # curve props and velocity in ξ-frame
     d,n,dotS = curve_props(body,x,t;fastd²)
     d^2 > fastd² && return d,zero(x),zero(x)
+    dξdt = dotS-ForwardDiff.derivative(t->body.map(x,t),t)
 
     # Convert to x-frame with dξ/dx⁻¹ (d has already been scaled)
     dξdx = ForwardDiff.jacobian(x->body.map(x,t),x)
-    return (d, dξdx\n/body.scale, dξdx\dotS + velocity(body.map,x,t))
+    return (d,dξdx\n/body.scale,dξdx\dξdt)
 end
 """
     d = sdf(body::AbstractParametricBody,x,t)
