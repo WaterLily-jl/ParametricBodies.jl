@@ -5,7 +5,7 @@ Returns a `function(u₀,x,t)` which finds `u⁺ = argmin(d²(u)=|curve(u,t)-x|�
 
     d²′ = (curve(u⁺,t)-x)'*tangent(curve,u⁺,t) = 0
 
-starting from an initial guess `u₀`. The function attempts to Newton step to the root, falling back on 
+starting from an initial guess `u₀`. The function attempts to Newton step to the root, falling back on
 gradient descent if `d²′′<0`. The resulting minimizer respects `u⁺ ∈ lims` and `closed` curves.
 
     Note: A good inital guess `u₀` is critical for robustly finding the _global_ minimizer.

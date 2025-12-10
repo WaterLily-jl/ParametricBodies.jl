@@ -24,7 +24,7 @@ function notC¹(l::NurbsLocator{C},uv) where C<:NurbsCurve{n,d} where {n,d}
     d==1 && return any(uv.≈l.curve.knots) # straight line spline is not C¹ at any knot
     # Assuming we don't have repeated knots, ends are the only remaining potential not C¹ locations
     low,high = first(l.curve.knots),last(l.curve.knots)
-    (uv≈low || uv≈high) ? !l.C¹end : false 
+    (uv≈low || uv≈high) ? !l.C¹end : false
 end
 function eachside(l::NurbsLocator,uv,s=√eps(typeof(uv)))
     low,high = first(l.curve.knots),last(l.curve.knots)
@@ -37,7 +37,7 @@ lims(b::ParametricBody{T,L}) where {T,L<:NurbsLocator} = (first(b.curve.knots),l
 
 Estimate the parameter value `u⁺ = argmin_u (x-l.curve(u))²` for a NURBS in two steps
 1. The nearest point `u` on the `degree=1` version of the curve is found. Return this if degree==1.
-2. Otherwse `refine` this guess until converged or the square distance ≥ `fastd²`. 
+2. Otherwse `refine` this guess until converged or the square distance ≥ `fastd²`.
 """
 function (l::NurbsLocator{C})(x,t;fastd²=Inf) where C<:NurbsCurve{N,degree} where {N,degree}
     # Closest parameter on linear NURBS
