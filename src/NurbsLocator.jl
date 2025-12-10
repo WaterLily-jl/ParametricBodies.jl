@@ -1,8 +1,8 @@
 """
-    NurbsLocator(curve::NurbsCurve)
+    NurbsLocator(curve::NurbsCurve) => (::NurbsLocator)(x,t;fastd²=Inf) => u⁺ = argmin_u |x-curve(u,t)|²
 
-NURBS-specific locator function. Loops through the spline sections, to find an inital guess
-based on the `degree=1` (straight-line) version, and then refine. Unlike `HashedLocator`
+NURBS-specific locator function. Loops through the spline sections, finds an inital guess
+based on the `degree=1` (straight-line) version, and then `refine`s. Unlike `HashedLocator`
 this locator doesn't need to be initialized.
 """
 struct NurbsLocator{C<:NurbsCurve,F<:Function} <: AbstractLocator
@@ -14,7 +14,7 @@ end
 function NurbsLocator(curve::NurbsCurve)
     low,high = first(curve.knots),last(curve.knots)
     C¹end = curve(low)≈curve(high) && tangent(curve,low,0)≈tangent(curve,high,0) # closed C¹ curve?
-    NurbsLocator(curve,C¹end,refine(curve,(low,high),C¹end))
+    NurbsLocator(curve,C¹end,refine(curve,(low,high),false))
 end
 Adapt.adapt_structure(to, x::NurbsLocator) = NurbsLocator(x.curve,x.C¹end,x.refine)
 
@@ -32,27 +32,22 @@ function eachside(l::NurbsLocator,uv,s=√eps(typeof(uv)))
 end
 
 lims(b::ParametricBody{T,L}) where {T,L<:NurbsLocator} = (first(b.curve.knots),last(b.curve.knots))
-"""
-    (l::NurbsLocator)(x,t;fastd²=Inf)
 
-Estimate the parameter value `u⁺ = argmin_u (x-l.curve(u))²` for a NURBS in two steps
-1. The nearest point `u` on the `degree=1` version of the curve is found. Return this if degree==1.
-2. Otherwse `refine` this guess until converged or the square distance ≥ `fastd²`. 
-"""
 function (l::NurbsLocator{C})(x,t;fastd²=Inf) where C<:NurbsCurve{N,degree} where {N,degree}
-    # Closest parameter on linear NURBS
-    pnts = l.curve.pnts; n = size(pnts,2)-1
-    b = pnts[:,1]; u,d² = zero(eltype(pnts)),sum(abs2,x-b)
+    pnts = l.curve.pnts; n = size(pnts,2)-1; T = eltype(pnts)
+    b = pnts[:,1]; u = zero(T); d² = sum(abs2,x-l.curve(u,t))
     for i in 1:n                        # Loop through segments
         a = b; b = pnts[:,i+1]               # segment a-to-b
         a==b && continue                     # skip zero length segments
         s = b-a                              # tangent vector
-        p = clamp(((x-a)'*s)/(s'*s),0,1)     # perp distance along s
+        p = clamp(((x-a)'*s)/(s's),0,1)      # perp distance along s
         uᵢ,d²ᵢ = (i-1+p)/n,sum(abs2,x-a-s*p) # segment minimizer
+        if degree>1                          # refine on curve
+            uᵢ = l.refine(uᵢ,x,t;fastd²,lims=(i-1,i)./T(n))
+            d²ᵢ = sum(abs2,x-l.curve(uᵢ,t))
+        end
         d²ᵢ<d² && (u=uᵢ;d²=d²ᵢ)              # update if uᵢ is closests
-    end
-    # Return if degree=1, otherwise refine
-    degree == 1 ? u : l.refine(u,x,t;fastd²)
+    end; u
 end
 """
     ParametricBody(curve::NurbsCurve;kwargs...)
