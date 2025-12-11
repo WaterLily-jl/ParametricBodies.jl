@@ -16,10 +16,10 @@ gradient descent if `d²′′<0`. The resulting minimizer respects `u⁺ ∈ li
     - `stpmn=stpmx/100`: Minimum step size before the loop will exit
     - `stpmd=stpmx/10`: Step size below which `d² ≥ fastd²` will exit the loop
 """
-function refine(curve,lims,closed)::Function
+function refine(curve,lims,closed,steps=20)::Function
     align(u,x,t) = (curve(u,t)-x)'*tangent(curve,u,t)
     dalign(u,x,t) = ForwardDiff.derivative(u->align(u,x,t),u)
-    stpmx=(lims[2]-lims[1])/20
+    stpmx=(lims[2]-lims[1])/steps
     return function(u::T,x,t;fastd²=Inf,itmx=10,lims=lims,stpmn=stpmx/100,stpmd=stpmx/10) where T
         for _ in 1:itmx
             u₀,a,da = u,align(u,x,t),dalign(u,x,t)
