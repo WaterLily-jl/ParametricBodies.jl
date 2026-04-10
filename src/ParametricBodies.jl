@@ -18,7 +18,7 @@ function measure(body::AbstractParametricBody,x,t;fastd²=Inf)
 
     # Convert to x-frame with dξ/dx⁻¹ (d has already been scaled)
     dξdx = ForwardDiff.jacobian(x->body.map(x,t),x)
-    return (d,dξdx\n/body.scale,dξdx\dξdt)
+    return (d,hat(dξdx'n),dξdx\dξdt)
 end
 """
     d = sdf(body::AbstractParametricBody,x,t)
