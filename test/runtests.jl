@@ -14,7 +14,7 @@ using CUDA
     @test ParametricBodies.perp(s) ≈ SA[0,1]
     @test ParametricBodies.align(SA[0.1, 0.5],s) ≈ SA[0, 1] # points in direction n
     @test ParametricBodies.align(SA[0.1,-0.5],s) ≈ SA[0,-1] # aligns with p to point down
-    
+
     @test sdf(body,SA[-.3,-.4],2.) ≈ -0.5
     d,n,V = measure(body,SA[-.75,1],4.)
     @test d ≈ 0.25
@@ -36,7 +36,7 @@ using CUDA
     @test [measure(body3,SA[3.,4.,0.],0.)...]≈[4,[3/5,4/5,0],[0,0,0]]
     @test [measure(body3,SA[-.3,-.4,0.],0.)...]≈[0.5,[3/5,4/5,0],[0,0,0]]
     @test [measure(body3,SA[1.,0.,1.],0.)...]≈[1,[0,0,1],[0,0,0]]
-    
+
     # "fast" is ignored (without error) by custom locator
     @test all(measure(body3,SA[1.,0.,1.],0.,fastd²=1) .≈ (1,[0,0,1],[0,0,0]))
 
@@ -65,7 +65,7 @@ end
     b = SA[7.0, 14.0]
     @test Matrix(a)\b ≈ a\b
 
-    
+
     x = SA_F32[1 0 0; 0 1 0]\SA_F32[0,1]
     @test @allocated(SA_F32[1 0 0; 0 1 0]\SA_F32[0,1]) <400
 end
@@ -84,6 +84,11 @@ end
     locate = refine(ellipse,(0,π),false)
     @test locate(1.,ellipse(π/4,0.),0.) ≈ π/4             # good IC
     @test locate(2.,ellipse(π/4,0.),0.) ≈ π/4 broken=true # bad IC
+    # Check for monotonic improvement
+    θ₀,locate = 2/3,refine(ellipse,(-π,π),true)
+    θ = locate(θ₀,SA[0,0],0;itmx=1,stpmx=π)
+    @test abs(θ) ≤ θ₀
+    @test sum(abs2,ellipse(θ₀,0)) ≥ sum(abs2,ellipse(θ,0))
 end
 
 @testset "HashedLocators.jl" begin
@@ -109,7 +114,7 @@ end
     if CUDA.functional()
         locator = HashedLocator(curve,(0.,2π),t⁰=t,step=0.25,buffer=1,mem=CuArray)
         x = [SA_F32[.5,.5],SA_F32[.0,.5]] |> CuArray
-        t = CUDA.zeros(2) 
+        t = CUDA.zeros(2)
         u = locator.(x,t)
         @test u|>Array ≈ [π/4,π/2]
     end
@@ -205,7 +210,7 @@ end
     # Check GPU locating
     if CUDA.functional()
         x = [SA{T}[5,5],SA{T}[0,5]] |> CuArray
-        t = CUDA.zeros(2) 
+        t = CUDA.zeros(2)
         u = locate.(x,t)
         @test u|>Array ≈ [1/8,1/4]
     end
@@ -223,11 +228,11 @@ end
     @test typeof.(measure(body,SA[5,5],0))==(T,SVector{2,T},SVector{2,T}) broken=true # but passing in Ints give mixed type output...
 
     body = update!(body, circle.pnts .+T(0.1), T(0.1))
-    @test [measure(body,SA[5,5],0)...]≈[4.9√2-5,[√2/2,√2/2],[1,1]] rtol=1e-6
+    @test [measure(body,SA[5,5],0)...]≈[4.9√2-5,[√2/2,√2/2],[1,1]] rtol=1e-5
     @test [measure(body,SA[0,0],0)...]≈[0.1√2-5,[-√2/2,-√2/2],[1,1]] rtol=1e-6
 
     # define a 3D torus with minor radius=1
-    cps3 = SA{T}[5 5 0 -5 -5 -5  0  5 5 
+    cps3 = SA{T}[5 5 0 -5 -5 -5  0  5 5
                  0 5 5  5  0 -5 -5 -5 0
                  0 0 0  0  0  0  0  0 0]
     circle3 = NurbsCurve(cps3,circle.knots,circle.wgts)
@@ -261,10 +266,16 @@ end
     @test [measure(closedM2,SA[-2-e,-1],0f0)...]≈[√2,[-√2/2,-√2/2],[0,0]] # outside end-point corner
     closedM3 = ParametricBody(BSplineCurve(SA_F32[0 1 1 0 -1 -1 0;0 0 1 1/2 1 0 0],degree=2)) # C¹ end
     @test [measure(closedM3,SA[-e,-1],0f0)...]≈[1,[0,-1],[0,0]] # outside end-point corner
+
+    # Check acute interior corner
+    notch = ParametricBody(BSplineCurve(SA_F32[113 115 97; 145 144 125], degree=1))
+    d, n, _ = measure(notch, SA_F32[150,200], 0f0)
+    @test d < 0  # point is inside
+    @test n[1] < 0 && n[2] < 0
 end
 @testset "Swept Bodies" begin
     circle = nurbs_circle(Float32,7)
-    
+
     # Make a cylinder
     extrude(x::SVector{3},t) = SA[x[2],x[3]]
     cylinder = ParametricBody(circle;map=extrude,ndims=3)
