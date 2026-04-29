@@ -7,7 +7,7 @@ abstract type AbstractParametricBody <: AbstractBody end
 """
     d,n,V = measure(body::AbstractParametricBody,x,t)
 
-Determine the geometric properties of the body at time `t` closest to 
+Determine the geometric properties of the body at time `t` closest to
 point `x`. Both `dot(curve)` and `dot(map)` contribute to `V` if defined.
 """
 function measure(body::AbstractParametricBody,x,t;fastd²=Inf)
@@ -32,14 +32,14 @@ sdf(body::AbstractParametricBody,x,t;fastd²=0) = curve_props(body,x,t;fastd²)[
     ParametricBody{T::Real}(curve,locate) <: AbstractBody
 
     - `curve(u,t)` parametrically defined curve
-    - `dotS(u,t)=derivative(t->curve(u,t),t)` time derivative of curve 
+    - `dotS(u,t)=derivative(t->curve(u,t),t)` time derivative of curve
     - `locate(ξ,t)` method to find nearest parameter `u` to `ξ`
     - `map(x,t)=x` mapping from `x` to `ξ`
     - `thk=0` thickness offset for the signed distance
     - `boundary=true` if the curve represent a body boundary, not a space-curve
 
-Explicitly defines a geometry by an unsteady parametric curve. The curve is currently limited 
-to be univariate, and must wind counter-clockwise if closed. The optional `dotS`, `map`, 
+Explicitly defines a geometry by an unsteady parametric curve. The curve is currently limited
+to be univariate, and must wind counter-clockwise if closed. The optional `dotS`, `map`,
 `thk` and `boundary` parameters allow for more general geometry embeddings.
 
 Example:
@@ -62,7 +62,7 @@ struct ParametricBody{T,L<:Function,S<:Function,dS<:Function,M<:Function,dT<:Fun
     map::M      #ξ = map(x,t)
     scale::T    #|dx/dξ| = scale
     half_thk::dT #half thickness
-    boundary::Bool 
+    boundary::Bool
 end
 # Default functions
 import LinearAlgebra: det
@@ -85,13 +85,14 @@ function curve_props(body::ParametricBody,x,t;fastd²=Inf)
         if C¹(body.locate,u)
             perp(hat(tangent(body.curve,u,t))) # easy peasy
         else # Set n s.t d=n'p even on corners/end-points...
-            s = sum(tangent.(body.curve,eachside(body.locate,u),t)) # mean tangent
-            sign(perp(s)'p)*hat(p)                                  # set sign
+            t₁,t₂ = tangent.(body.curve,eachside(body.locate,u),t) # segment tangents
+            s = sum(perp.(hat.((t₁,t₂))))                          # sum of outward normals
+            sign(s'p) * hat(p)
         end
     else # outward = towards p
         notC¹(body.locate,u) ? hat(p) : align(p,hat(tangent(body.curve,u,t)))
     end
-    
+
     # Get scaled & thinkess adjusted distance and dot(S)
     return (body.scale*p'*n-body.half_thk(u),n,body.dotS(u,t))
 end
