@@ -1,7 +1,7 @@
 module ParametricBodies
 
-using StaticArrays,ForwardDiff
-import WaterLily: AbstractBody,measure,sdf,interp
+using StaticArrays
+import WaterLily: AbstractBody,measure,sdf,interp,derivative,jacobian
 
 abstract type AbstractParametricBody <: AbstractBody end
 """
@@ -14,10 +14,10 @@ function measure(body::AbstractParametricBody,x,t;fastd²=Inf)
     # curve props and velocity in ξ-frame
     d,n,dotS = curve_props(body,x,t;fastd²)
     d^2 > fastd² && return d,zero(x),zero(x)
-    dξdt = dotS-ForwardDiff.derivative(t->body.map(x,t),t)
+    dξdt = dotS-derivative(t->body.map(x,t),t)
 
     # Convert to x-frame with dξ/dx⁻¹ (d has already been scaled)
-    dξdx = ForwardDiff.jacobian(x->body.map(x,t),x)
+    dξdx = jacobian(x->body.map(x,t),x)
     return (d,hat(dξdx'n),dξdx\dξdt)
 end
 """
@@ -67,9 +67,9 @@ end
 # Default functions
 import LinearAlgebra: det
 dmap(x,t) = x
-get_dotS(curve) = (u,t)->ForwardDiff.derivative(t->curve(u,t),t)
+get_dotS(curve) = (u,t)->derivative(t->curve(u,t),t)
 x_hat(ndims) = SVector(ntuple(i->√inv(ndims),ndims))
-get_scale(map,x,t=0) = norm(ForwardDiff.jacobian(x->map(x,t),x)\x_hat(length(map(x,t))))
+get_scale(map,x,t=0) = norm(jacobian(x->map(x,t),x)\x_hat(length(map(x,t))))
 ParametricBody(curve,locate;dotS=get_dotS(curve),thk=(u)->0f0,boundary=true,map=dmap,ndims=2,x₀=x_hat(ndims),
                scale=get_scale(map,x₀),T=Float32,kwargs...) = ParametricBody(curve,dotS,locate,map,T(scale),make_func(thk),boundary)
 make_func(a::Function) = (s)->a(s)/2
@@ -98,7 +98,7 @@ end
 notC¹(::Function,u) = false; C¹(f,u) = !notC¹(f,u)
 
 hat(p) = p/√(eps(eltype(p))+p'*p)
-tangent(curve,u,t) = ForwardDiff.derivative(u->curve(u,t),u)
+tangent(curve,u,t) = derivative(u->curve(u,t),u)
 align(p,s) = hat(p-(p'*s)*s)
 perp(s::SVector{2}) = SA[s[2],-s[1]]
 perp(s) = s # should never be used!

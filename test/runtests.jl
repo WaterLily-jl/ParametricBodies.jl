@@ -135,7 +135,7 @@ end
     @test measure(body,SA[0.4,0.3],0.)[2] ≈ [-4/5,-3/5] rtol=1e-4
 end
 
-using LinearAlgebra,ForwardDiff
+using LinearAlgebra
 function nurbs_circle(T,R=5;center=SA[0,0])
     cps = SA{T}[R R 0 -R -R -R  0  R R
                 0 R R  R  0 -R -R -R 0].+center
