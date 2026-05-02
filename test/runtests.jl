@@ -349,3 +349,30 @@ end
         end
     end
 end
+@testset "ParametricBody nested ForwardDiff (GPU-safe)" begin
+    using WaterLily: loc
+    using WaterLily
+    using ForwardDiff
+    arrays = CUDA.functional() ? [Array, CuArray] : [Array]
+    # Build a unit circle in body frame, applied with a θ-rotated, centered map.
+    # Sum the first normal component over a grid; differentiate w.r.t. θ. Without
+    # the GPU-safe gradient/jacobian dispatch through WaterLily, the inner FD
+    # tag mismatches an outer Dual seeded by ForwardDiff.derivative and crashes
+    # inside @kernel codegen on CuArray.
+    function measure_sum(θ, mem; L=16)
+        T = typeof(θ)
+        s, c = sincos(θ)
+        curve(u, t) = SA[2*cos(2π*u), sin(2π*u)]   # ellipse — rotation breaks integral symmetry
+        locate(ξ::SVector{2}, t) = mod(atan(ξ[2], ξ[1]) / (2π), one(eltype(ξ)))
+        body = ParametricBody(curve, locate;
+            map = (x, _) -> SA[c -s; s c] * (x - SA[Float64(L), Float64(L)]) / 4,
+            scale = 0.25)
+        out = mem(zeros(T, 2L, 2L))
+        WaterLily.@loop out[I] = measure(body, loc(0, I, T), zero(T))[2][1] over I ∈ CartesianIndices(out)
+        sum(out)
+    end
+    cpu_kd = ForwardDiff.derivative(t -> measure_sum(t, Array), 0.3)
+    for f ∈ arrays
+        @test ForwardDiff.derivative(t -> measure_sum(t, f), 0.3) ≈ cpu_kd rtol=1e-3
+    end
+end
