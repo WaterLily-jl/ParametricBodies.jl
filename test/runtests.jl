@@ -105,7 +105,7 @@ end
     body = ParametricBody(curve,locator)
     @test sdf(body,SA[-3.,-4.],t) ≈ 4. rtol=1.5e-2 # outside hash
 
-    t = 0.5; ParametricBodies.update!(body,t)
+    t = 0.5; update!(body,t)
     d,n,V = measure(body,SA[-.75,1],t)
     @test d ≈ 0.25
     @test n ≈ SA[-3/5, 4/5] rtol=1e-4
@@ -326,7 +326,7 @@ using WaterLily
             end
             if nurbs # `sim.body=...` requires WaterLily 1.2.0+
                 dc = 1f0
-                sim.body = ParametricBodies.update!(sim.body, sim.body.curve.pnts .+ dc, sim.flow.Δt[end])
+                sim.body = update!(sim.body, sim.body.curve.pnts .+ dc, sim.flow.Δt[end])
                 measure_sdf!(sim.flow.σ,sim.body); d = sim.flow.σ |> Array
                 I = CartesianIndex(5,5)
                 @test d[I]≈√sum(abs2,WaterLily.loc(0,I) .- dc)-5 atol=1e-6
@@ -345,7 +345,7 @@ function hydrostatic!(p::AbstractArray{T,D},body;psolver=:MultiLevelPoisson,mem=
     # create Poisson solver
     pois = eval(psolver)(p,μ⁰,z) # the initial solution points to p
     @inside pois.z[I] = WaterLily.∂(1,I,pois.L) # zero V contribution everywhere
-    WaterLily.update!(pois); solver!(pois;tol=100eps(T),itmx=32)
+    update!(pois); solver!(pois;tol=100eps(T),itmx=32)
 end
 @testset "Hydrostatic pressure test" begin
     for mem in (CUDA.functional() ? [CuArray,Array] : [Array]), T in [Float32, Float64]

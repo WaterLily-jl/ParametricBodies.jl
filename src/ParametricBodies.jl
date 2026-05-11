@@ -1,7 +1,7 @@
 module ParametricBodies
 
 using StaticArrays
-import WaterLily: AbstractBody,measure,sdf,interp,derivative,jacobian
+import WaterLily: AbstractBody,measure,sdf,interp,derivative,jacobian,update!
 
 abstract type AbstractParametricBody <: AbstractBody end
 """
