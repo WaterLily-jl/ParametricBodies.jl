@@ -315,7 +315,7 @@ using WaterLily
             end
             if nurbs # `sim.body=...` requires WaterLily 1.2.0+
                 dc = 1f0
-                sim.body = update!(sim.body, sim.body.curve.pnts .+ dc, sim.flow.Δt[end])
+                sim.body = ParametricBodies.update!(sim.body, sim.body.curve.pnts .+ dc, sim.flow.Δt[end])
                 measure_sdf!(sim.flow.σ,sim.body); d = sim.flow.σ |> Array
                 I = CartesianIndex(5,5)
                 @test d[I]≈√sum(abs2,WaterLily.loc(0,I) .- dc)-5 atol=1e-6
