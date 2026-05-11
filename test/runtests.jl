@@ -140,7 +140,7 @@ end
     @test measure(body,SA[0.4,0.3],0.)[2] ≈ [-4/5,-3/5] rtol=1e-4
 end
 
-using LinearAlgebra,ForwardDiff
+using LinearAlgebra
 function nurbs_circle(T,R=5;center=SA[0,0])
     cps = SA{T}[R R 0 -R -R -R  0  R R
                 0 R R  R  0 -R -R -R 0].+center
@@ -326,7 +326,7 @@ using WaterLily
             end
             if nurbs # `sim.body=...` requires WaterLily 1.2.0+
                 dc = 1f0
-                sim.body = update!(sim.body, sim.body.curve.pnts .+ dc, sim.flow.Δt[end])
+                sim.body = ParametricBodies.update!(sim.body, sim.body.curve.pnts .+ dc, sim.flow.Δt[end])
                 measure_sdf!(sim.flow.σ,sim.body); d = sim.flow.σ |> Array
                 I = CartesianIndex(5,5)
                 @test d[I]≈√sum(abs2,WaterLily.loc(0,I) .- dc)-5 atol=1e-6
@@ -358,5 +358,32 @@ end
             hydrostatic!(p,body;mem)
             @test WaterLily.pressure_force(p,f,body,0)./(N^2*π) ≈ [1,0] atol=3e-3
         end
+    end
+end
+@testset "ParametricBody nested ForwardDiff (GPU-safe)" begin
+    using WaterLily: loc
+    using WaterLily
+    using ForwardDiff
+    arrays = CUDA.functional() ? [Array, CuArray] : [Array]
+    # Build a unit circle in body frame, applied with a θ-rotated, centered map.
+    # Sum the first normal component over a grid; differentiate w.r.t. θ. Without
+    # the GPU-safe gradient/jacobian dispatch through WaterLily, the inner FD
+    # tag mismatches an outer Dual seeded by ForwardDiff.derivative and crashes
+    # inside @kernel codegen on CuArray.
+    function measure_sum(θ, mem; L=16)
+        T = typeof(θ)
+        s, c = sincos(θ)
+        curve(u, t) = SA[2*cos(2π*u), sin(2π*u)]   # ellipse — rotation breaks integral symmetry
+        locate(ξ::SVector{2}, t) = mod(atan(ξ[2], ξ[1]) / (2π), one(eltype(ξ)))
+        body = ParametricBody(curve, locate;
+            map = (x, _) -> SA[c -s; s c] * (x - SA[Float64(L), Float64(L)]) / 4,
+            scale = 0.25)
+        out = mem(zeros(T, 2L, 2L))
+        WaterLily.@loop out[I] = measure(body, loc(0, I, T), zero(T))[2][1] over I ∈ CartesianIndices(out)
+        sum(out)
+    end
+    cpu_kd = ForwardDiff.derivative(t -> measure_sum(t, Array), 0.3)
+    for f ∈ arrays
+        @test ForwardDiff.derivative(t -> measure_sum(t, f), 0.3) ≈ cpu_kd rtol=1e-3
     end
 end

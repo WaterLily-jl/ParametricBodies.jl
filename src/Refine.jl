@@ -18,7 +18,7 @@ gradient descent if `d²′′<0`. The resulting minimizer respects `u⁺ ∈ li
 """
 function refine(curve,lims,closed)::Function
     align(u,x,t) = (curve(u,t)-x)'*tangent(curve,u,t)
-    dalign(u,x,t) = ForwardDiff.derivative(u->align(u,x,t),u)
+    dalign(u,x,t) = derivative(u->align(u,x,t),u)
     return function(u::T,x,t;fastd²=Inf,itmx=10,stpmx=(lims[2]-lims[1])/20,stpmn=stpmx/100,stpmd=stpmx/10) where T
         d² = sum(abs2, curve(u,t)-x)
         for _ in 1:itmx
