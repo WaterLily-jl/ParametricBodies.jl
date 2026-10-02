@@ -5,20 +5,59 @@ NURBS-specific locator function. Loops through the spline sections, to find an i
 based on the `degree=1` (straight-line) version, and then refine. Unlike `HashedLocator`
 this locator doesn't need to be initialized.
 """
-struct NurbsLocator{C<:NurbsCurve,F<:Function} <: AbstractLocator
+struct NurbsLocator{C<:NurbsCurve,F<:Function,V<:SVector,T} <: AbstractLocator
     curve::C
     C¹end::Bool
     refine::F
+    lo::V      # bounding box of the control points. A NURBS with positive weights lies in
+    hi::V      # their convex hull, so the distance to this box lower-bounds `d`
+    thkmax::T  # largest half-thickness, the allowance that bound needs for a thick body
 end
 
-function NurbsLocator(curve::NurbsCurve)
+"""
+    NurbsLocator(curve::NurbsCurve;thkmax=Inf)
+
+`thkmax` is the largest half-thickness of the body this locator will serve, and is what lets
+[`far_field`](@ref) skip the search for points nowhere near the curve. It defaults to `Inf`,
+which disables that shortcut -- a locator built without knowing the thickness cannot tell a
+far point from one inside a very thick body, so it must not guess.
+"""
+function NurbsLocator(curve::NurbsCurve{N};thkmax=eltype(curve.pnts)(Inf)) where N
     low,high = first(curve.knots),last(curve.knots)
     C¹end = curve(low)≈curve(high) && tangent(curve,low,0)≈tangent(curve,high,0) # closed C¹ curve?
-    NurbsLocator(curve,C¹end,refine(curve,(low,high),C¹end))
+    lo = SVector{N}(minimum(curve.pnts[i,:]) for i in 1:N)
+    hi = SVector{N}(maximum(curve.pnts[i,:]) for i in 1:N)
+    NurbsLocator(curve,C¹end,refine(curve,(low,high),C¹end),lo,hi,eltype(curve.pnts)(thkmax))
 end
-Adapt.adapt_structure(to, x::NurbsLocator) = NurbsLocator(x.curve,x.C¹end,x.refine)
+Adapt.adapt_structure(to, x::NurbsLocator) = NurbsLocator(x.curve,x.C¹end,x.refine,x.lo,x.hi,x.thkmax)
 
-update!(l::NurbsLocator,curve,t) = l=NurbsLocator(curve) # just make a new locator
+update!(l::NurbsLocator,curve,t) = l=NurbsLocator(curve;thkmax=l.thkmax) # just make a new locator
+
+"""
+    max_half_thk(half_thk,curve,n=65)
+
+Largest half-thickness over the curve's parameter range, sampled. Sampling is enough for the
+tapered and piecewise thickness functions in use; a pathological `half_thk` would need its
+own bound.
+"""
+max_half_thk(half_thk,curve,n=65) = maximum(half_thk(u) for u in range(first(curve.knots),last(curve.knots),n))
+
+"""
+    far_field(body,ξ,fastd²)
+
+The `(d,n,V)` of a point that provably cannot lie within `fastd²` of the body, or `nothing`
+when it might. `scale`×(distance from `ξ` to the control-point box) − `thkmax` lower-bounds
+the signed distance, so a point beyond the band by that measure stays beyond it however the
+search refines -- and the whole locate, the curve evaluations and the normal logic can be
+skipped. `d` is that bound rather than the exact distance, the same capping `MeshBody` does
+with `√fastd²`, so a field of `sdf` values is only exact inside the band. `fastd²=0` means
+the caller wants no shortcut.
+"""
+function far_field(body::ParametricBody{T,L},ξ,fastd²) where {T,L<:NurbsLocator}
+    d = body.scale*boxd(ξ,body.locate.lo,body.locate.hi)-body.locate.thkmax
+    (fastd²>0 && d>0 && d^2≥fastd²) ? (d,zero(ξ),zero(ξ)) : nothing
+end
+@inline boxd(ξ,lo,hi) = sqrt(sum(abs2,max.(lo.-ξ,ξ.-hi,zero(ξ))))
 
 function notC¹(l::NurbsLocator{C},uv) where C<:NurbsCurve{n,d} where {n,d}
     d==1 && return any(uv.≈l.curve.knots) # straight line spline is not C¹ at any knot
@@ -59,7 +98,12 @@ end
 
 Creates a `ParametricBody` with `locate=NurbsLocator`.
 """
-ParametricBody(curve::NurbsCurve{N};T=eltype(curve.pnts),ndims=N,kwargs...) where N = ParametricBody(curve,NurbsLocator(curve);T,ndims,kwargs...)
+function ParametricBody(curve::NurbsCurve{N};T=eltype(curve.pnts),ndims=N,kwargs...) where N
+    # the locator is told the thickness here, the one place it is known, so that `far_field`
+    # can reject points off the body without mistaking a thick body's surface for far away
+    thkmax = max_half_thk(make_func(get(kwargs,:thk,zero(T))),curve)
+    ParametricBody(curve,NurbsLocator(curve;thkmax);T,ndims,kwargs...)
+end
 
 """
     DynamicNurbsBody(curve::NurbsCurve;kwargs...)
@@ -75,6 +119,6 @@ end
 function update!(body::ParametricBody{T,L,S},uⁿ::AbstractArray{T},vⁿ::AbstractArray{T}) where {T,L<:NurbsLocator,S<:NurbsCurve}
     curve = NurbsCurve(uⁿ,body.curve.knots,body.curve.wgts)
     dotS = NurbsCurve(vⁿ,body.curve.knots,body.curve.wgts)
-    ParametricBody(curve,dotS,NurbsLocator(curve),body.map,body.scale,body.half_thk,body.boundary)
+    ParametricBody(curve,dotS,NurbsLocator(curve;thkmax=body.locate.thkmax),body.map,body.scale,body.half_thk,body.boundary)
 end
 update!(body::ParametricBody,uⁿ::AbstractArray,Δt::Number) = update!(body,uⁿ,(uⁿ-copy(body.curve.pnts))/Δt)

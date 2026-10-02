@@ -77,6 +77,7 @@ make_func(a::Number) = (s)->a/2
 function curve_props(body::ParametricBody,x,t;fastd²=Inf)
     # Map x to ξ, locate nearest u (quickly if applicable), and get vector
     ξ = body.map(x,t)
+    ff = far_field(body,ξ,fastd²); !isnothing(ff) && return ff # cheap reject, see `far_field`
     u = applicable(body.locate,ξ,t;fastd²) ? body.locate(ξ,t,fastd²=fastd²/body.scale^2) : body.locate(ξ,t)
     p = ξ-body.curve(u,t)
 
@@ -97,6 +98,7 @@ function curve_props(body::ParametricBody,x,t;fastd²=Inf)
     return (body.scale*p'*n-body.half_thk(u),n,body.dotS(u,t))
 end
 notC¹(::Function,u) = false; C¹(f,u) = !notC¹(f,u)
+far_field(::AbstractParametricBody,ξ,fastd²) = nothing # no cheap bound unless the locator has one
 
 hat(p) = p/√(eps(eltype(p))+p'*p)
 tangent(curve,u,t) = derivative(u->curve(u,t),u)
@@ -128,4 +130,4 @@ export PlanarBody
 include("Recipes.jl")
 export f
 
-end
+end
