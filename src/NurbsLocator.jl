@@ -36,24 +36,28 @@ lims(b::ParametricBody{T,L}) where {T,L<:NurbsLocator} = (first(b.curve.knots),l
     (l::NurbsLocator)(x,t;fastd²=Inf)
 
 Estimate the parameter value `u⁺ = argmin_u (x-l.curve(u))²` for a NURBS in two steps
-1. The nearest point `u` on the `degree=1` version of the curve is found. Return this if degree==1.
-2. Otherwse `refine` this guess until converged or the square distance ≥ `fastd²`. 
+1. The nearest point `u` on the `degree=1` version of the curve is found, with each control
+   point at its Greville abscissa. Return this if degree==1.
+2. Otherwse `refine` this guess until converged or the square distance ≥ `fastd²`.
 """
 function (l::NurbsLocator{C})(x,t;fastd²=Inf) where C<:NurbsCurve{N,degree} where {N,degree}
     # Closest parameter on linear NURBS
-    pnts = l.curve.pnts; n = size(pnts,2)-1
+    pnts,knots = l.curve.pnts,l.curve.knots; n = size(pnts,2)-1
     b = pnts[:,1]; u,d² = zero(eltype(pnts)),sum(abs2,x-b)
     for i in 1:n                        # Loop through segments
         a = b; b = pnts[:,i+1]               # segment a-to-b
         a==b && continue                     # skip zero length segments
         s = b-a                              # tangent vector
         p = clamp(((x-a)'*s)/(s'*s),0,1)     # perp distance along s
-        uᵢ,d²ᵢ = (i-1+p)/n,sum(abs2,x-a-s*p) # segment minimizer
+        ξa,ξb = greville(knots,i,Val(degree)),greville(knots,i+1,Val(degree))
+        uᵢ,d²ᵢ = ξa+p*(ξb-ξa),sum(abs2,x-a-s*p) # segment minimizer
         d²ᵢ<d² && (u=uᵢ;d²=d²ᵢ)              # update if uᵢ is closests
     end
     # Return if degree=1, otherwise refine
     degree == 1 ? u : l.refine(u,x,t;fastd²)
 end
+# Parameter where control point `j` acts, so non-uniform knots get a good initial guess
+greville(knots,j,::Val{d}) where d = sum(ntuple(m->knots[j+m],d))/d
 """
     ParametricBody(curve::NurbsCurve;kwargs...)
 

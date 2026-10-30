@@ -272,6 +272,11 @@ end
     d, n, _ = measure(notch, SA_F32[150,200], 0f0)
     @test d < 0  # point is inside
     @test n[1] < 0 && n[2] < 0
+
+    # Non-uniform knots: a thin hairpin with its knots packed at the start. A poor initial
+    # guess lands on the far branch, flipping the sign of points just below the near one.
+    hairpin = ParametricBody(NurbsCurve(SA[0. 2 3 3 2 0; 0 0 0 0.1 0.1 0.1],[0,0,0,0,0.1,0.2,1,1,1,1],ones(6)))
+    @test sdf(hairpin,SA[2.,-0.2],0) ≈ 0.2 atol=0.01
 end
 @testset "Swept Bodies" begin
     circle = nurbs_circle(Float32,7)
