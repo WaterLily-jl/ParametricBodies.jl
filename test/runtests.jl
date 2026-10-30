@@ -277,6 +277,10 @@ end
     # guess lands on the far branch, flipping the sign of points just below the near one.
     hairpin = ParametricBody(NurbsCurve(SA[0. 2 3 3 2 0; 0 0 0 0.1 0.1 0.1],[0,0,0,0,0.1,0.2,1,1,1,1],ones(6)))
     @test sdf(hairpin,SA[2.,-0.2],0) ≈ 0.2 atol=0.01
+
+    # Control polygon far from the curve: its nearest segment leads to the wrong local minimum
+    loop = ParametricBody(NurbsCurve(SA[2.5 2.5 1.0 2.5 0.0; 2.0 4.0 1.5 2.0 2.0],[0,0,0,0,0.5,1,1,1,1],ones(5)))
+    @test abs(sdf(loop,SA[0.5,1.5],0)) ≈ 0.4963 atol=1e-3
 end
 @testset "Swept Bodies" begin
     circle = nurbs_circle(Float32,7)
