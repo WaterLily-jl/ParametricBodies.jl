@@ -1,6 +1,7 @@
 using ParametricBodies
 using StaticArrays,Test
 using CUDA
+using ParametricBodies: update! # CUDA.jl 6.5 exports an update! too
 
 @testset "ParametricBodies.jl" begin
     curve(θ,t) = SA[cos(θ+t),sin(θ+t)]
