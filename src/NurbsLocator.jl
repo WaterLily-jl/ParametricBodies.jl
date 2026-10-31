@@ -44,9 +44,9 @@ lims(b::ParametricBody{T,L}) where {T,L<:NurbsLocator} = (first(b.curve.knots),l
     (l::NurbsLocator)(x,t;fastd²=Inf)
 
 Estimate the parameter value `u⁺ = argmin_u (x-l.curve(u))²` for a NURBS in two steps
-1. The nearest point `u` on the guide polyline, which runs through points on the curve, is
-   found. This is exact if degree==1.
-2. Otherwse `refine` this guess until converged or the square distance ≥ `fastd²`.
+1. Find the nearest point `u` on the guide polyline through points on the curve. This is
+   exact if degree==1.
+2. Otherwise `refine` this guess until converged or the square distance ≥ `fastd²`.
 """
 function (l::NurbsLocator{C})(x,t;fastd²=Inf) where C<:NurbsCurve{N,degree} where {N,degree}
     # Closest parameter on the guide polyline
