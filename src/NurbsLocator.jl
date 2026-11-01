@@ -1,22 +1,30 @@
 """
     NurbsLocator(curve::NurbsCurve)
 
-NURBS-specific locator function. Loops through the spline sections, to find an inital guess
-based on the `degree=1` (straight-line) version, and then refine. Unlike `HashedLocator`
-this locator doesn't need to be initialized.
+NURBS-specific locator function. Finds an initial guess on a guide polyline through points
+on the curve, and then refines. Unlike `HashedLocator` this locator doesn't need to be
+initialized.
 """
-struct NurbsLocator{C<:NurbsCurve,F<:Function} <: AbstractLocator
+struct NurbsLocator{C<:NurbsCurve,G,U,F<:Function} <: AbstractLocator
     curve::C
+    guide::G  # points on the curve
+    uguide::U # their parameters
     C¹end::Bool
     refine::F
 end
 
-function NurbsLocator(curve::NurbsCurve)
+function NurbsLocator(curve::NurbsCurve{N,d}) where {N,d}
     low,high = first(curve.knots),last(curve.knots)
     C¹end = curve(low)≈curve(high) && tangent(curve,low,0)≈tangent(curve,high,0) # closed C¹ curve?
-    NurbsLocator(curve,C¹end,refine(curve,(low,high),C¹end))
+    uguide = guide_parameters(curve.knots,size(curve.pnts,2),Val(d))
+    NurbsLocator(curve,hcat(curve.(uguide)...),uguide,C¹end,refine(curve,(low,high),C¹end))
 end
-Adapt.adapt_structure(to, x::NurbsLocator) = NurbsLocator(x.curve,x.C¹end,x.refine)
+
+# Greville abscissae and their midpoints
+function guide_parameters(knots,n,::Val{d}) where d
+    ξ(j) = sum(ntuple(m->knots[j+m],d))/d
+    SVector(ntuple(k->isodd(k) ? ξ((k+1)÷2) : (ξ(k÷2)+ξ(k÷2+1))/2,2n-1))
+end
 
 update!(l::NurbsLocator,curve,t) = l=NurbsLocator(curve) # just make a new locator
 
@@ -36,19 +44,20 @@ lims(b::ParametricBody{T,L}) where {T,L<:NurbsLocator} = (first(b.curve.knots),l
     (l::NurbsLocator)(x,t;fastd²=Inf)
 
 Estimate the parameter value `u⁺ = argmin_u (x-l.curve(u))²` for a NURBS in two steps
-1. The nearest point `u` on the `degree=1` version of the curve is found. Return this if degree==1.
-2. Otherwse `refine` this guess until converged or the square distance ≥ `fastd²`. 
+1. Find the nearest point `u` on the guide polyline through points on the curve. This is
+   exact if degree==1.
+2. Otherwise `refine` this guess until converged or the square distance ≥ `fastd²`.
 """
 function (l::NurbsLocator{C})(x,t;fastd²=Inf) where C<:NurbsCurve{N,degree} where {N,degree}
-    # Closest parameter on linear NURBS
-    pnts = l.curve.pnts; n = size(pnts,2)-1
-    b = pnts[:,1]; u,d² = zero(eltype(pnts)),sum(abs2,x-b)
+    # Closest parameter on the guide polyline
+    G,uG = l.guide,l.uguide; n = size(G,2)-1
+    b = G[:,1]; u,d² = uG[1],sum(abs2,x-b)
     for i in 1:n                        # Loop through segments
-        a = b; b = pnts[:,i+1]               # segment a-to-b
+        a = b; b = G[:,i+1]                  # segment a-to-b
         a==b && continue                     # skip zero length segments
         s = b-a                              # tangent vector
         p = clamp(((x-a)'*s)/(s'*s),0,1)     # perp distance along s
-        uᵢ,d²ᵢ = (i-1+p)/n,sum(abs2,x-a-s*p) # segment minimizer
+        uᵢ,d²ᵢ = uG[i]+p*(uG[i+1]-uG[i]),sum(abs2,x-a-s*p) # segment minimizer
         d²ᵢ<d² && (u=uᵢ;d²=d²ᵢ)              # update if uᵢ is closests
     end
     # Return if degree=1, otherwise refine
